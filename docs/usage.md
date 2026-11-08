@@ -1,0 +1,75 @@
+# 사용 가이드
+
+[README로 돌아가기](../README.md)
+
+## 위젯과 관리 화면
+
+- **컴팩트 모드**: RAM 사용률, 빗자루 모양 정리 버튼, 펼치기 버튼을 표시합니다. RAM 수치 위에 마우스를 두면 세부 수치나 마지막 정리 결과를 확인할 수 있습니다.
+- **펼친 위젯**: 여유 메모리와 40칸 메모리 셀을 표시합니다. 접기 버튼으로 컴팩트 모드로 돌아가며, 작은 창 아이콘은 항상 위에 표시, 닫기는 앱 종료입니다.
+- **이동**: 컴팩트 모드는 RAM 수치 영역을, 펼친 위젯은 상단의 로고·이름·빈 영역을 잡아 옮깁니다. 버튼은 이동 영역에서 제외되며 위젯 글자는 선택되지 않습니다.
+- **관리 화면**: 앱별 메모리를 보거나 시작 프로그램을 관리합니다. **작은 위젯으로** 버튼으로 돌아갑니다.
+
+위젯 버튼은 표시된 정리 가능 앱 전체를 대상으로 합니다. 개별 앱만 정리하려면 관리 화면에서 선택하세요. 정렬이나 검색 후에도 선택한 프로세스의 식별 정보가 유지됩니다.
+
+## 저장되는 설정
+
+위치·항상 위에 표시·컴팩트 모드는 `HKCU\Software\Memori\Settings`에 함께 저장합니다. 이동 후와 종료 시 저장하며, 관리 화면 좌표는 위젯 위치를 덮어쓰지 않습니다. 저장된 위치가 화면을 벗어나면 가장 가까운 모니터의 작업 영역 안으로 복원합니다.
+
+## Windows 로그인 시 실행
+
+**시작 프로그램 → Windows 로그인 시 Memori 위젯 자동 실행**으로 바꿉니다. 현재 계정의 다음 위치에서 `Memori` 값 하나만 관리합니다.
+
+```text
+HKEY_CURRENT_USER\Software\Microsoft\Windows\CurrentVersion\Run
+```
+
+등록 명령은 따옴표로 감싼 현재 실행 파일 경로와 `--widget`입니다. 관리자 권한이나 서비스 설치가 필요하지 않습니다. 일반 실행은 사용자가 꺼 둔 자동 실행을 다시 켜지 않습니다.
+
+실행 파일을 옮기기 전에 자동 실행을 끄고, 새 위치에서 다시 켜 주세요. Windows에서 별도로 차단했다면 Windows 시작 앱 설정에서 확인합니다.
+
+## 시작 앱 상세 정보
+
+전체·켜짐·꺼짐·확인 필요 필터는 검색과 함께 적용됩니다. 꺼짐에는 Memori 보관 항목과 Windows에서 꺼진 항목이 모두 포함됩니다.
+
+앱 이름을 누르면 해당 행이 강조되고 **상세 정보** 패널이 열립니다. 실행 명령과 관리 범위를 볼 수 있으며, **닫기**, **Esc**, 같은 앱 이름 재클릭으로 닫습니다.
+
+직접 관리할 수 있는 항목은 스위치를 사용합니다. 공용 항목과 Windows 관리 항목은 **Windows 설정** 버튼을 사용합니다. 변경 사항은 다음 로그인부터 적용됩니다.
+
+## 시작 항목 보관과 복원
+
+원본은 앱을 닫아도 남습니다. 앱을 삭제하기 전에 필요한 항목을 **다시 켜기**로 복원하세요.
+
+| 항목 | 끄는 방법 | 원본 보관 위치 |
+|---|---|---|
+| 현재 계정 Run | 원본 형식·바이트를 보관하고 검증한 뒤 Run 값 제거 | `HKCU\Software\Memori\DisabledRun` |
+| 현재 계정 시작 폴더 | 원본 파일을 같은 볼륨의 보관 폴더로 이동 | 시작 폴더 상위의 `MemoriDisabledStartup` |
+
+시작 폴더는 Windows Known Folder API로 찾습니다. 일반적인 보관 폴더는 `%APPDATA%\Microsoft\Windows\Start Menu\Programs\MemoriDisabledStartup`입니다.
+
+복원 시 같은 이름의 다른 항목을 덮어쓰지 않고, 조회 후 변경된 항목은 다시 확인하도록 안내합니다. 중간에 작업이 끊기면 보관된 원본을 유지합니다. Memori 창 사이의 변경은 잠금으로 보호하지만, 다른 프로그램의 동시 Run 값 변경까지 원자적으로 처리하지는 않습니다.
+
+Windows `StartupApproved`는 조회만 합니다. 해석할 수 없는 상태와 Windows에서 이미 꺼진 항목은 Windows 설정에서 관리합니다. 모든 사용자 Run 64/32비트와 공용 시작 폴더는 읽기 전용입니다. 예약 작업·서비스·드라이버·RunOnce·정책 기반 시작 항목은 관리하지 않습니다.
+
+## 메모리 수치 읽기
+
+표시되는 GB와 MB는 1024³, 1024²바이트 기준입니다. 작업 집합에는 공유 페이지도 포함되므로 앱별 수치의 합은 전체 물리 메모리 사용량과 다를 수 있습니다. 커밋은 Windows가 프로세스에 약속한 메모리이며, 표시되는 한도에는 RAM과 페이지 파일이 반영됩니다.
+
+정리 후 결과는 성공한 프로세스에서 관측한 작업 집합 감소량입니다. 메모리가 다시 늘거나 다음 반응이 잠깐 느려질 수 있습니다. 자동 정리는 없습니다.
+
+## 명령줄
+
+```powershell
+memori.exe                 # 저장된 모드로 위젯 열기
+memori.exe --compact       # 컴팩트 위젯
+memori.exe --expanded      # 펼친 위젯
+memori.exe --full          # 메모리 관리 화면
+memori.exe --startup       # 시작 프로그램 화면
+memori.exe --enable-startup
+memori.exe --disable-startup
+```
+
+## 참고 자료
+
+- [Microsoft: EmptyWorkingSet](https://learn.microsoft.com/en-us/windows/win32/api/psapi/nf-psapi-emptyworkingset)
+- [Microsoft: Working Set](https://learn.microsoft.com/en-us/windows/win32/memory/working-set)
+- [Microsoft: Run and RunOnce Registry Keys](https://learn.microsoft.com/en-us/windows/win32/setupapi/run-and-runonce-registry-keys)

@@ -1,0 +1,7 @@
+/target/
+/dist/
+/.impeccable/*
+!/.impeccable/design.json
+*.log
+__pycache__/
+*.pyc

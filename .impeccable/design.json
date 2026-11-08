@@ -1,0 +1,322 @@
+{
+  "schemaVersion": 2,
+  "generatedAt": "2026-11-08T05:40:51.1305436Z",
+  "title": "Design System: Memori",
+  "extensions": {
+    "colorMeta": {
+      "background": {
+        "role": "neutral",
+        "displayName": "Instrument Ink",
+        "tonalRamp": [
+          "oklch(15% 0.01920 252.10)",
+          "oklch(26% 0.01920 252.10)",
+          "oklch(37% 0.01920 252.10)",
+          "oklch(48% 0.01920 252.10)",
+          "oklch(59% 0.01920 252.10)",
+          "oklch(70% 0.01920 252.10)",
+          "oklch(82% 0.01920 252.10)",
+          "oklch(95% 0.01920 252.10)"
+        ]
+      },
+      "navigation": {
+        "role": "neutral",
+        "displayName": "Navigation Ink",
+        "tonalRamp": [
+          "oklch(15% 0.01727 252.62)",
+          "oklch(26% 0.01727 252.62)",
+          "oklch(37% 0.01727 252.62)",
+          "oklch(48% 0.01727 252.62)",
+          "oklch(59% 0.01727 252.62)",
+          "oklch(70% 0.01727 252.62)",
+          "oklch(82% 0.01727 252.62)",
+          "oklch(95% 0.01727 252.62)"
+        ]
+      },
+      "control": {
+        "role": "neutral",
+        "displayName": "Raised Slate",
+        "tonalRamp": [
+          "oklch(15% 0.02786 248.87)",
+          "oklch(26% 0.02786 248.87)",
+          "oklch(37% 0.02786 248.87)",
+          "oklch(48% 0.02786 248.87)",
+          "oklch(59% 0.02786 248.87)",
+          "oklch(70% 0.02786 248.87)",
+          "oklch(82% 0.02786 248.87)",
+          "oklch(95% 0.02786 248.87)"
+        ]
+      },
+      "control-hover": {
+        "role": "neutral",
+        "displayName": "Hover Slate",
+        "tonalRamp": [
+          "oklch(15% 0.03505 244.16)",
+          "oklch(26% 0.03505 244.16)",
+          "oklch(37% 0.03505 244.16)",
+          "oklch(48% 0.03505 244.16)",
+          "oklch(59% 0.03505 244.16)",
+          "oklch(70% 0.03505 244.16)",
+          "oklch(82% 0.03505 244.16)",
+          "oklch(95% 0.03505 244.16)"
+        ]
+      },
+      "text": {
+        "role": "neutral",
+        "displayName": "Warm White",
+        "tonalRamp": [
+          "oklch(15% 0.00859 247.92)",
+          "oklch(26% 0.00859 247.92)",
+          "oklch(37% 0.00859 247.92)",
+          "oklch(48% 0.00859 247.92)",
+          "oklch(59% 0.00859 247.92)",
+          "oklch(70% 0.00859 247.92)",
+          "oklch(82% 0.00859 247.92)",
+          "oklch(95% 0.00859 247.92)"
+        ]
+      },
+      "text-secondary": {
+        "role": "neutral",
+        "displayName": "Quiet Blue Gray",
+        "tonalRamp": [
+          "oklch(15% 0.03076 248.22)",
+          "oklch(26% 0.03076 248.22)",
+          "oklch(37% 0.03076 248.22)",
+          "oklch(48% 0.03076 248.22)",
+          "oklch(59% 0.03076 248.22)",
+          "oklch(70% 0.03076 248.22)",
+          "oklch(82% 0.03076 248.22)",
+          "oklch(95% 0.03076 248.22)"
+        ]
+      },
+      "rule": {
+        "role": "neutral",
+        "displayName": "Track Rule",
+        "tonalRamp": [
+          "oklch(15% 0.03254 248.74)",
+          "oklch(26% 0.03254 248.74)",
+          "oklch(37% 0.03254 248.74)",
+          "oklch(48% 0.03254 248.74)",
+          "oklch(59% 0.03254 248.74)",
+          "oklch(70% 0.03254 248.74)",
+          "oklch(82% 0.03254 248.74)",
+          "oklch(95% 0.03254 248.74)"
+        ]
+      },
+      "accent": {
+        "role": "primary",
+        "displayName": "Active Cyan",
+        "tonalRamp": [
+          "oklch(15% 0.09636 183.06)",
+          "oklch(26% 0.09636 183.06)",
+          "oklch(37% 0.09636 183.06)",
+          "oklch(48% 0.09636 183.06)",
+          "oklch(59% 0.09636 183.06)",
+          "oklch(70% 0.09636 183.06)",
+          "oklch(82% 0.09636 183.06)",
+          "oklch(95% 0.09636 183.06)"
+        ]
+      },
+      "caution": {
+        "role": "secondary",
+        "displayName": "Warm Caution",
+        "tonalRamp": [
+          "oklch(15% 0.10390 76.89)",
+          "oklch(26% 0.10390 76.89)",
+          "oklch(37% 0.10390 76.89)",
+          "oklch(48% 0.10390 76.89)",
+          "oklch(59% 0.10390 76.89)",
+          "oklch(70% 0.10390 76.89)",
+          "oklch(82% 0.10390 76.89)",
+          "oklch(95% 0.10390 76.89)"
+        ]
+      },
+      "error": {
+        "role": "secondary",
+        "displayName": "Soft Coral",
+        "tonalRamp": [
+          "oklch(15% 0.10463 19.71)",
+          "oklch(26% 0.10463 19.71)",
+          "oklch(37% 0.10463 19.71)",
+          "oklch(48% 0.10463 19.71)",
+          "oklch(59% 0.10463 19.71)",
+          "oklch(70% 0.10463 19.71)",
+          "oklch(82% 0.10463 19.71)",
+          "oklch(95% 0.10463 19.71)"
+        ]
+      }
+    },
+    "typographyMeta": {
+      "display": {
+        "displayName": "Display",
+        "purpose": "Widget available-memory reading."
+      },
+      "title": {
+        "displayName": "Title",
+        "purpose": "Management page heading."
+      },
+      "section": {
+        "displayName": "Section",
+        "purpose": "Process-list heading."
+      },
+      "summary": {
+        "displayName": "Summary",
+        "purpose": "Physical-memory summary and startup introduction."
+      },
+      "body": {
+        "displayName": "Body",
+        "purpose": "Rows and primary information."
+      },
+      "button": {
+        "displayName": "Button",
+        "purpose": "Ordinary native action labels."
+      },
+      "label": {
+        "displayName": "Label",
+        "purpose": "Supporting text and column labels."
+      },
+      "micro": {
+        "displayName": "Micro",
+        "purpose": "Plot axes, widget feedback, and footer metadata."
+      },
+      "compact-reading": {
+        "displayName": "Compact Reading",
+        "purpose": "RAM percentage in the compact widget rail."
+      }
+    },
+    "shadows": [],
+    "motion": [
+      {
+        "name": "native-control-animation",
+        "value": "100ms",
+        "purpose": "Inherited egui 0.33.3 control-state interpolation; no app-specific easing or decorative motion."
+      }
+    ],
+    "breakpoints": [
+      {
+        "name": "process-reason-content-width",
+        "value": "720px"
+      }
+    ]
+  },
+  "components": [
+    {
+      "name": "Widget trim action",
+      "kind": "button",
+      "refersTo": "button-widget-primary",
+      "description": "Expanded widget action, shown enabled; radius 12 and minimum height 42. Native source disables busy, stale, and empty-target states.",
+      "html": "<button class=\"ds-primary\" type=\"button\">메모리 정리</button>",
+      "css": ".ds-primary{font-family:'Malgun Gothic',sans-serif;font-weight:normal;font-size:14px;background:#7DE0D1;color:#0C1219;border:1px solid #31404F;border-radius:12px;min-height:42px;width:100%;padding:7px 14px;cursor:pointer}.ds-primary:hover,.ds-primary:focus-visible{border-color:#7DE0D1;outline:none}.ds-primary:active{border-width:1.5px}.ds-primary:disabled{opacity:.5;cursor:default}"
+    },
+    {
+      "name": "Sortable process table and trim action",
+      "kind": "custom",
+      "refersTo": "sort-header-active",
+      "description": "Separate flexible name, right-aligned PID 72 and working set 100, and left-aligned status 140 tracks. Each 30-high header sorts and names its direction; default is working set descending. Stable identity ties survive refresh, while the criterion lasts only this app session. The row and values are illustrative; the native status track hides below 720 content width.",
+      "html": "<section class=\"ds-sort-table\" aria-label=\"앱별 메모리 표시 예시\"><p class=\"ds-sort-summary\">작업 집합 · 내림차순</p><div class=\"ds-sort-grid\" role=\"row\"><span></span><div role=\"columnheader\" aria-sort=\"none\"><button class=\"ds-sort-head\" aria-label=\"앱 이름 · 정렬 안 함 · 눌러 정렬\"><span>앱 이름</span><svg width=\"6\" height=\"10\" viewBox=\"0 0 6 10\" aria-hidden=\"true\"><path d=\"M0 3 3 0l3 3zM0 7h6l-3 3z\" fill=\"#31404F\"/></svg></button></div><div role=\"columnheader\" aria-sort=\"none\"><button class=\"ds-sort-head ds-sort-number\" aria-label=\"PID · 정렬 안 함 · 눌러 정렬\"><span>PID</span><svg width=\"6\" height=\"10\" viewBox=\"0 0 6 10\" aria-hidden=\"true\"><path d=\"M0 3 3 0l3 3zM0 7h6l-3 3z\" fill=\"#31404F\"/></svg></button></div><div role=\"columnheader\" aria-sort=\"descending\"><button class=\"ds-sort-head ds-sort-number ds-sort-active\" aria-label=\"작업 집합 · 내림차순 · 눌러 정렬\"><span>작업 집합</span><svg width=\"6\" height=\"10\" viewBox=\"0 0 6 10\" aria-hidden=\"true\"><path d=\"M0 3h6L3 7z\" fill=\"currentColor\"/></svg></button></div><div role=\"columnheader\" aria-sort=\"none\"><button class=\"ds-sort-head\" aria-label=\"정리 상태 · 정렬 안 함 · 눌러 정렬\"><span>정리 상태</span><svg width=\"6\" height=\"10\" viewBox=\"0 0 6 10\" aria-hidden=\"true\"><path d=\"M0 3 3 0l3 3zM0 7h6l-3 3z\" fill=\"#31404F\"/></svg></button></div></div><div class=\"ds-sort-grid ds-sort-row\" role=\"row\"><input type=\"checkbox\" aria-label=\"app.exe PID 26424 메모리 정리 선택\"><span>app.exe</span><span class=\"ds-sort-value ds-sort-pid\">26424</span><span class=\"ds-sort-value\">915 MB</span><span class=\"ds-sort-reason\">선택하여 정리</span></div><button class=\"ds-trim\" type=\"button\">선택한 2개 정리</button></section>",
+      "css": ".ds-trim{font-family:'Malgun Gothic',sans-serif;font-weight:normal;font-size:13px;background:#7DE0D1;color:#0C1219;border:1px solid #31404F;border-radius:2px;min-width:200px;min-height:38px;padding:7px 14px;cursor:pointer}.ds-trim:hover,.ds-trim:focus-visible{border-color:#7DE0D1;border-radius:3px;outline:none}.ds-trim:active{border:1.5px solid #7DE0D1;border-radius:2px}.ds-trim:disabled{opacity:.5;cursor:default}.ds-sort-table{font-family:Malgun Gothic,sans-serif;font-weight:normal;background:#111820;color:#EDF2F7;padding:12px;font-size:14px}.ds-sort-summary{font-size:12px;color:#A7B8C9;margin:0 0 8px}.ds-sort-grid{display:grid;grid-template-columns:20px minmax(80px,1fr) 72px 100px 140px;gap:10px;align-items:center}.ds-sort-head{font-family:Malgun Gothic,sans-serif;font-size:12px;display:flex;align-items:center;justify-content:space-between;gap:8px;width:100%;min-height:30px;padding:0 8px;border:0;border-radius:6px;background:transparent;color:#A7B8C9;cursor:pointer}.ds-sort-number{justify-content:flex-end}.ds-sort-active{background:#1D2935;color:#7DE0D1}.ds-sort-head:hover,.ds-sort-head:focus-visible{background:#1D2935}.ds-sort-head:focus-visible{outline:1px solid #7DE0D1;outline-offset:-1px}.ds-sort-head:active{color:#7DE0D1}.ds-sort-row{min-height:34px;border-top:1px solid #31404F;border-bottom:1px solid #31404F;margin:8px 0 12px}.ds-sort-value{text-align:right}.ds-sort-pid,.ds-sort-reason{color:#A7B8C9}.ds-sort-reason{font-size:12px}.ds-sort-row input{accent-color:#7DE0D1}"
+    },
+    {
+      "name": "Secondary action",
+      "kind": "button",
+      "refersTo": "button-secondary",
+      "description": "Refresh and other explicitly labeled native actions.",
+      "html": "<button class=\"ds-secondary\" type=\"button\">새로 고침</button>",
+      "css": ".ds-secondary{font-family:'Malgun Gothic',sans-serif;font-weight:normal;font-size:13px;background:#1D2935;color:#EDF2F7;border:1px solid #31404F;border-radius:2px;min-height:32px;padding:7px 14px;cursor:pointer}.ds-secondary:hover,.ds-secondary:focus-visible{background:#2B3D4C;border-color:#7DE0D1;border-radius:3px;outline:none}.ds-secondary:active{border:1.5px solid #7DE0D1;border-radius:2px}.ds-secondary:disabled{opacity:.5;cursor:default}"
+    },
+    {
+      "name": "Process search",
+      "kind": "input",
+      "refersTo": "input-search",
+      "description": "Single-line search; this preview names the same name/PID scope as the native hint.",
+      "html": "<input class=\"ds-search\" aria-label=\"앱 이름 또는 PID 검색\" placeholder=\"앱 이름 또는 PID 검색\">",
+      "css": ".ds-search{font-family:'Malgun Gothic',sans-serif;font-weight:normal;font-size:14px;width:200px;padding:7px;color:#EDF2F7;background:#0C1219;border:1px solid #31404F;border-radius:2px}.ds-search::placeholder{color:#A7B8C9;opacity:1}.ds-search:hover,.ds-search:focus-visible{border-color:#7DE0D1;outline:none}.ds-search:disabled{opacity:.5}"
+    },
+    {
+      "name": "Management navigation",
+      "kind": "nav",
+      "refersTo": "navigation-selected",
+      "description": "Two fixed-sidebar page choices; selected state has cyan text and a raised surface.",
+      "html": "<nav class=\"ds-nav\" aria-label=\"관리 화면\"><button class=\"ds-nav-item ds-nav-selected\" aria-current=\"page\">메모리</button><button class=\"ds-nav-item\">시작 프로그램</button></nav>",
+      "css": ".ds-nav{width:138px;padding:8px;background:#0C1219;display:grid;gap:12px}.ds-nav-item{font-family:'Malgun Gothic',sans-serif;font-weight:normal;font-size:14px;min-height:42px;padding:7px 14px;color:#A7B8C9;background:#0C1219;border:1px solid transparent;border-radius:2px;cursor:pointer}.ds-nav-selected{color:#7DE0D1;background:#1D2935}.ds-nav-item:hover,.ds-nav-item:focus-visible{border-color:#7DE0D1;outline:none}.ds-nav-item:active{border-width:1.5px}"
+    },
+    {
+      "name": "Operation notice",
+      "kind": "card",
+      "refersTo": "notice",
+      "description": "Native inset feedback surface; example text is illustrative rather than a live measured result.",
+      "html": "<section class=\"ds-notice\" role=\"status\"><span>조회 결과가 여기에 표시됩니다.</span><button class=\"ds-notice-close\" type=\"button\">닫기</button></section>",
+      "css": ".ds-notice{font-family:'Malgun Gothic',sans-serif;font-weight:normal;font-size:14px;display:flex;align-items:center;gap:10px;background:#1D2935;color:#7DE0D1;padding:12px;border-radius:6px}.ds-notice-close{font-family:'Malgun Gothic',sans-serif;font-weight:normal;font-size:12px;color:#EDF2F7;background:#1D2935;border:1px solid #31404F;border-radius:2px;padding:1px 4px;cursor:pointer}.ds-notice-close:hover,.ds-notice-close:focus-visible{background:#2B3D4C;border-color:#7DE0D1;outline:none}.ds-notice-close:active{border-width:1.5px}"
+    },
+    {
+      "name": "Expanded widget surface",
+      "kind": "card",
+      "refersTo": "widget-shell",
+      "description": "Expanded 360 × 340 native widget: left-aligned painted logo/name and blank header form the native caption drag region, excluding collapse/pin/close. Mode, position, and pin persist together; physical position clamps to nearest work area. Reduced material preview below does not drag a native window.",
+      "html": "<section class=\"ds-shell\"><div class=\"ds-shell-header\"><div class=\"ds-shell-drag\" aria-label=\"위젯 이동 영역\"><svg width=\"21\" height=\"22\" viewBox=\"0 0 21 22\" fill=\"none\" aria-hidden=\"true\"><rect x=\"0\" y=\"12\" width=\"4\" height=\"10\" rx=\"2\" fill=\"#7DE0D1\"/><rect x=\"7\" y=\"2\" width=\"4\" height=\"20\" rx=\"2\" fill=\"#7DE0D1\"/><rect x=\"14\" y=\"8\" width=\"4\" height=\"14\" rx=\"2\" fill=\"#7DE0D1\"/></svg><span class=\"ds-shell-title\">memori</span></div><button class=\"ds-tool\" aria-label=\"컴팩트 모드로 접기\"><svg width=\"16\" height=\"16\" viewBox=\"0 0 16 16\" aria-hidden=\"true\"><path d=\"M3 8h10\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.5\"/></svg></button><button class=\"ds-tool ds-tool-selected\" aria-label=\"항상 위에 표시\" aria-pressed=\"true\"><svg width=\"16\" height=\"16\" viewBox=\"0 0 16 16\" fill=\"none\" aria-hidden=\"true\"><rect x=\"2\" y=\"2.5\" width=\"12\" height=\"11\" rx=\"2\" stroke=\"currentColor\" stroke-width=\"1.5\"/><path d=\"M3 6h10\" stroke=\"currentColor\" stroke-width=\"1.5\"/></svg></button><button class=\"ds-tool\" aria-label=\"Memori 종료\"><svg width=\"16\" height=\"16\" viewBox=\"0 0 16 16\" fill=\"none\" aria-hidden=\"true\"><path d=\"M4 4l8 8m0-8-8 8\" stroke=\"currentColor\" stroke-width=\"1.5\"/></svg></button></div><p class=\"ds-shell-label\">사용 가능한 메모리</p><p class=\"ds-shell-reading\">7.8 GB</p><p class=\"ds-shell-note\">표시 예시 · 실제 값은 Windows에서 조회</p></section>",
+      "css": ".ds-shell{font-family:Malgun Gothic,sans-serif;font-weight:normal;width:298px;margin:8px;padding:22px;background:#111820;color:#EDF2F7;border:1px solid #31404F;border-radius:18px;user-select:none}.ds-shell-header{display:grid;grid-template-columns:minmax(0,1fr) repeat(3,28px);align-items:center;gap:8px;min-height:28px}.ds-shell-drag{display:flex;align-items:center;gap:10px;min-height:28px;cursor:grab;user-select:none}.ds-shell-drag:active{cursor:grabbing}.ds-shell-title{font-size:20px}.ds-shell-label{font-size:12px;color:#A7B8C9;margin:20px 0 8px}.ds-shell-reading{font-size:29px;margin:0}.ds-shell-note{font-size:11px;color:#A7B8C9;margin:8px 0 0}.ds-tool{display:grid;place-items:center;width:28px;height:28px;padding:0;border:0;border-radius:8px;background:#111820;color:#A7B8C9;cursor:pointer}.ds-tool-selected{background:#1D2935;color:#7DE0D1}.ds-tool:hover,.ds-tool:focus-visible{color:#7DE0D1;outline:none}.ds-tool:active{color:#7DE0D1}"
+    },
+    {
+      "name": "Segmented availability meter",
+      "kind": "custom",
+      "description": "Forty fixed segments; the illustrative 68% split is not live data. Native code rounds used fraction × 40.",
+      "html": "<div class=\"ds-meter\" role=\"meter\" aria-label=\"메모리 사용률 표시 예시\" aria-valuemin=\"0\" aria-valuemax=\"100\" aria-valuenow=\"68\"><span class=\"ds-meter-segment ds-meter-used\"></span><span class=\"ds-meter-segment ds-meter-used\"></span><span class=\"ds-meter-segment ds-meter-used\"></span><span class=\"ds-meter-segment ds-meter-used\"></span><span class=\"ds-meter-segment ds-meter-used\"></span><span class=\"ds-meter-segment ds-meter-used\"></span><span class=\"ds-meter-segment ds-meter-used\"></span><span class=\"ds-meter-segment ds-meter-used\"></span><span class=\"ds-meter-segment ds-meter-used\"></span><span class=\"ds-meter-segment ds-meter-used\"></span><span class=\"ds-meter-segment ds-meter-used\"></span><span class=\"ds-meter-segment ds-meter-used\"></span><span class=\"ds-meter-segment ds-meter-used\"></span><span class=\"ds-meter-segment ds-meter-used\"></span><span class=\"ds-meter-segment ds-meter-used\"></span><span class=\"ds-meter-segment ds-meter-used\"></span><span class=\"ds-meter-segment ds-meter-used\"></span><span class=\"ds-meter-segment ds-meter-used\"></span><span class=\"ds-meter-segment ds-meter-used\"></span><span class=\"ds-meter-segment ds-meter-used\"></span><span class=\"ds-meter-segment ds-meter-used\"></span><span class=\"ds-meter-segment ds-meter-used\"></span><span class=\"ds-meter-segment ds-meter-used\"></span><span class=\"ds-meter-segment ds-meter-used\"></span><span class=\"ds-meter-segment ds-meter-used\"></span><span class=\"ds-meter-segment ds-meter-used\"></span><span class=\"ds-meter-segment ds-meter-used\"></span><span class=\"ds-meter-segment\"></span><span class=\"ds-meter-segment\"></span><span class=\"ds-meter-segment\"></span><span class=\"ds-meter-segment\"></span><span class=\"ds-meter-segment\"></span><span class=\"ds-meter-segment\"></span><span class=\"ds-meter-segment\"></span><span class=\"ds-meter-segment\"></span><span class=\"ds-meter-segment\"></span><span class=\"ds-meter-segment\"></span><span class=\"ds-meter-segment\"></span><span class=\"ds-meter-segment\"></span><span class=\"ds-meter-segment\"></span></div>",
+      "css": ".ds-meter{display:grid;grid-template-columns:repeat(40,1fr);gap:3px;width:298px;height:18px}.ds-meter-segment{background:#7DE0D1;border-radius:1.5px}.ds-meter-used{background:#31404F}"
+    },
+    {
+      "name": "Compact RAM widget",
+      "kind": "custom",
+      "refersTo": "compact-shell",
+      "description": "248×82 compact mode shows RAM percentage, a named 32 × 32 cyan broom trim target, and a named 32 × 32 expand control. Positive trim count briefly shows a check for two seconds. Only the reading region is native draggable; native WM_NCHITTEST caption handling is scoped to this window. Preview data and selected state are illustrative.",
+      "html": "<section class=\"ds-compact\"><div class=\"ds-compact-drag\" aria-label=\"RAM 68%, 잡아서 위젯 이동\" title=\"표시 예시 · 실제 메모리는 Windows에서 조회\"><span class=\"ds-compact-label\">RAM</span><span class=\"ds-compact-percent\">68%</span></div><button class=\"ds-compact-trim\" aria-label=\"메모리 정리 · 효과는 일시적입니다\"><svg width=\"32\" height=\"32\" viewBox=\"0 0 32 32\" fill=\"none\" aria-hidden=\"true\"><path d=\"M15 14l6-6M10 16l4-4 5 5-4 4zM12 18l2-2m0 4 2-2\" stroke=\"currentColor\" stroke-width=\"1.5\"/></svg></button><button class=\"ds-compact-expand\" aria-label=\"위젯 펼치기\"><svg width=\"32\" height=\"32\" viewBox=\"0 0 32 32\" fill=\"none\" aria-hidden=\"true\"><path d=\"M11 15v-4h4m6 6v4h-4\" stroke=\"currentColor\" stroke-width=\"1.5\"/></svg></button></section>",
+      "css": ".ds-compact{font-family:Malgun Gothic,sans-serif;font-weight:normal;display:grid;grid-template-columns:minmax(0,1fr) 32px 32px;align-items:center;gap:8px;width:206px;height:40px;margin:8px;padding:12px;border:1px solid #31404F;border-radius:24px;background:#111820;color:#EDF2F7;user-select:none}.ds-compact-drag{position:relative;min-height:40px;cursor:grab}.ds-compact-drag:active{cursor:grabbing}.ds-compact-label{position:absolute;left:0;top:50%;transform:translateY(-50%);font-size:11px;color:#A7B8C9}.ds-compact-percent{position:absolute;left:34px;top:50%;transform:translateY(-50%);font-size:22px;color:#EDF2F7}.ds-compact-trim,.ds-compact-expand{display:grid;place-items:center;width:32px;height:32px;padding:0;border:0;cursor:pointer}.ds-compact-trim{background:#7DE0D1;color:#0C1219;border-radius:11px}.ds-compact-expand{background:#111820;color:#A7B8C9;border-radius:8px}.ds-compact-expand:hover,.ds-compact-expand:focus-visible{color:#7DE0D1;outline:none}.ds-compact-expand:active{color:#7DE0D1}.ds-compact-trim:hover,.ds-compact-trim:focus-visible{outline:1px solid #7DE0D1}.ds-compact-trim:active{outline-width:1.5px}.ds-compact-trim:disabled{opacity:.5;cursor:default}"
+    },
+    {
+      "name": "Startup states, filters, and controls",
+      "kind": "custom",
+      "description": "Counted filters combine with search; off includes preserved and Windows-disabled entries. Fixed 66-high rows pair a 130-wide dot/text badge track with a 136-wide action track. Manageable entries have a 44×24 requested switch, rendered at least 28 high by inherited interaction sizing; other entries use Windows settings. Examples are illustrative. The separate checkbox manages only this executable's HKCU Run Memori registration, not other apps. Selected rows use a control fill and cyan outline. Their name button toggles a distinct full-width details panel with a 16-point heading, named close button, truncated 14-point app name/full tooltip, labeled command, and 76-high scroll region (40 in short layout). Close, same-entry click, or Escape in the full startup view clears selection and restores list space. All sample values are illustrative.",
+      "html": "<section class=\"ds-startup\"><div class=\"ds-startup-filters\" aria-label=\"시작 앱 상태 필터\"><button class=\"ds-startup-filter ds-startup-filter-selected\" aria-pressed=\"true\">전체 4</button><button class=\"ds-startup-filter\" aria-pressed=\"false\">켜짐 1</button><button class=\"ds-startup-filter\" aria-pressed=\"false\">꺼짐 2</button><button class=\"ds-startup-filter\" aria-pressed=\"false\">확인 필요 1</button></div><div class=\"ds-startup-row ds-startup-row-selected\"><div><button class=\"ds-startup-name\" aria-expanded=\"true\" aria-controls=\"ds-startup-details\" aria-label=\"앱 A 상세 정보 닫기\">앱 A</button><div class=\"ds-startup-source\">내 계정 · Run</div></div><div><span class=\"ds-startup-badge ds-startup-on\" aria-label=\"자동 실행 켜짐\">켜짐</span></div><div><button class=\"ds-startup-switch\" role=\"switch\" aria-checked=\"true\" aria-label=\"앱 A 자동 실행\"></button></div></div><div class=\"ds-startup-row\"><div class=\"ds-startup-off-name\"><div>앱 B</div><div class=\"ds-startup-source\">내 계정 · 보관됨</div></div><div><span class=\"ds-startup-badge ds-startup-off\" aria-label=\"자동 실행 꺼짐 · 보관됨\">꺼짐 · 보관됨</span></div><div><button class=\"ds-startup-switch ds-startup-switch-off\" role=\"switch\" aria-checked=\"false\" aria-label=\"앱 B 자동 실행\"></button></div></div><div class=\"ds-startup-row\"><div class=\"ds-startup-off-name\"><div>앱 C</div><div class=\"ds-startup-source\">내 계정 · Run</div></div><div><span class=\"ds-startup-badge ds-startup-off\" aria-label=\"자동 실행 꺼짐 · Windows\">꺼짐 · Windows</span></div><div><button class=\"ds-startup-settings\">Windows 설정</button></div></div><div class=\"ds-startup-row\"><div><div>앱 D</div><div class=\"ds-startup-source\">공용 · Run</div></div><div><span class=\"ds-startup-badge ds-startup-unknown\" aria-label=\"자동 실행 확인 필요\">확인 필요</span></div><div><button class=\"ds-startup-settings\">Windows 설정</button></div></div><label class=\"ds-login\"><input class=\"ds-login-check\" type=\"checkbox\" checked><span>Windows 로그인 시 Memori 위젯 자동 실행</span></label><section class=\"ds-startup-details\" id=\"ds-startup-details\" aria-labelledby=\"ds-startup-details-title\"><div class=\"ds-startup-details-header\"><span id=\"ds-startup-details-title\" class=\"ds-startup-details-title\">상세 정보</span><button class=\"ds-startup-details-close\" aria-label=\"상세 정보 닫기\" title=\"상세 정보 닫기 · Esc\">닫기</button></div><div class=\"ds-startup-details-name\" title=\"앱 A\">앱 A</div><div class=\"ds-startup-details-scroll\"><div class=\"ds-startup-details-label\">실행 명령</div><div class=\"ds-startup-details-command\">&quot;C:\\Apps\\Example\\app.exe&quot; --widget</div><div class=\"ds-startup-details-note\">표시 예시 · 이 영역에서 실행 명령과 관리 범위를 확인합니다.</div></div></section></section>",
+      "css": ".ds-login{font-family:Malgun Gothic,sans-serif;font-weight:normal;font-size:14px;display:flex;align-items:center;gap:10px;color:#EDF2F7;cursor:pointer}.ds-login-check{accent-color:#7DE0D1;cursor:pointer}.ds-login-check:hover,.ds-login-check:focus-visible{outline:1px solid #7DE0D1}.ds-login-check:active{outline-width:1.5px}.ds-login-check:disabled{opacity:.5;cursor:default}.ds-startup{font-family:Malgun Gothic,sans-serif;font-weight:normal;font-size:14px;background:#111820;color:#EDF2F7;padding:12px}.ds-startup-filters{display:flex;gap:10px;margin-bottom:8px}.ds-startup-filter{font-family:Malgun Gothic,sans-serif;font-size:12px;min-height:30px;padding:7px 14px;background:#1D2935;color:#A7B8C9;border:1px solid #31404F;border-radius:8px;cursor:pointer}.ds-startup-filter-selected{background:#2C4A4C;color:#7DE0D1}.ds-startup-filter:hover,.ds-startup-filter:focus-visible{border-color:#7DE0D1;outline:none}.ds-startup-filter:active{color:#7DE0D1}.ds-startup-row{display:grid;grid-template-columns:minmax(120px,1fr) 130px 136px;gap:10px;align-items:center;height:66px;border-bottom:.5px solid #31404F;border-radius:6px}.ds-startup-row:hover{background:#17212B}.ds-startup-source{font-size:12px;color:#A7B8C9;margin-top:8px}.ds-startup-off-name{color:#A7B8C9}.ds-startup-badge{display:inline-flex;align-items:center;gap:4.5px;height:24px;padding:0 10px 0 6.5px;border-radius:12px;font-size:11px;white-space:nowrap}.ds-startup-badge::before{content:\"\";display:block;width:5px;height:5px;border-radius:50%;background:currentColor}.ds-startup-on{color:#7DE0D1;background:#1E3035}.ds-startup-off{color:#A7B8C9;background:#232B34}.ds-startup-unknown{color:#F0C17A;background:#2C2C2B}.ds-startup-switch{position:relative;width:44px;min-height:28px;padding:0;border:1px solid #7DE0D1;border-radius:12px;background:#7DE0D1;cursor:pointer}.ds-startup-switch::after{content:\"\";position:absolute;width:16px;height:16px;right:4px;top:calc(50% - 8px);border-radius:50%;background:#0C1219}.ds-startup-switch-off{border-color:#A7B8C9;background:#1D2935}.ds-startup-switch-off::after{left:4px;right:auto;background:#A7B8C9}.ds-startup-switch:hover{cursor:pointer}.ds-startup-switch:focus-visible{outline:1px solid #7DE0D1;outline-offset:3px}.ds-startup-switch:active{outline:1px solid #7DE0D1}.ds-startup-switch:disabled{opacity:.5;cursor:default}.ds-startup-settings{font-family:Malgun Gothic,sans-serif;font-size:13px;width:112px;min-height:32px;padding:7px 14px;color:#EDF2F7;background:#1D2935;border:1px solid #31404F;border-radius:2px;cursor:pointer}.ds-startup-settings:hover,.ds-startup-settings:focus-visible{background:#2B3D4C;border-color:#7DE0D1;outline:none}.ds-startup-settings:active{border-width:1.5px}.ds-startup .ds-login{margin-top:12px}.ds-startup-row.ds-startup-row-selected,.ds-startup-row.ds-startup-row-selected:hover{background:#1D2935;outline:1px solid #7DE0D1;outline-offset:-1px}.ds-startup-row-selected .ds-startup-off-name{color:#EDF2F7}.ds-startup-name{font-family:Malgun Gothic,sans-serif;font-weight:normal;font-size:15px;max-width:100%;padding:0;border:0;background:transparent;color:#EDF2F7;text-align:left;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;cursor:pointer}.ds-startup-name:hover,.ds-startup-name:focus-visible{color:#7DE0D1;outline:none}.ds-startup-name:active{color:#7DE0D1}.ds-startup-details{margin-top:12px;padding:16px;background:#1D2935;color:#EDF2F7;border:1px solid #31404F;border-radius:12px}.ds-startup-details-header{display:flex;align-items:center;justify-content:space-between;gap:10px}.ds-startup-details-title{font-size:16px}.ds-startup-details-close{font-family:Malgun Gothic,sans-serif;font-weight:normal;font-size:13px;min-height:32px;padding:7px 14px;color:#EDF2F7;background:#1D2935;border:1px solid #31404F;border-radius:2px;cursor:pointer}.ds-startup-details-close:hover,.ds-startup-details-close:focus-visible{background:#2B3D4C;border-color:#7DE0D1;outline:none}.ds-startup-details-close:active{border-width:1.5px}.ds-startup-details-name{font-size:14px;margin:8px 0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.ds-startup-details-scroll{max-height:76px;overflow-y:auto;font-size:12px}.ds-startup-details-label,.ds-startup-details-note{color:#A7B8C9}.ds-startup-details-command{margin:8px 0;overflow-wrap:anywhere}.ds-startup-details-short{padding:12px}.ds-startup-details-short .ds-startup-details-scroll{max-height:40px}",
+      "refersTo": "startup-switch-on"
+    }
+  ],
+  "narrative": {
+    "northStar": "The Studio Mixing Console",
+    "overview": "Memori is a quiet, ink-blue instrument: measured tracks, a cyan active channel, warm-white text, and explicit Korean controls. Density serves comparison. The desktop widget switches between a compact RAM rail and an expanded instrument, each keeping its reading and action inside one enclosed surface; the management window gives live history and aligned lists room to breathe.\n\nThis is the implemented native Windows system, extracted from `src/ui.rs`, `src/main.rs`, and the related sorting/window/preferences modules. Base rendered references are `.impeccable/review/widget.png`, `desktop.png`, `startup.png`, and `compact.png`; current table references are `.impeccable/review/memory-0.1.2.png`, `memory-small-0.1.2.png`, `startup-0.1.2.png`, and `startup-small-0.1.2.png`. Measurements are egui logical points, represented as px in the portable token schema; Windows display scaling determines physical pixels. The implementation owns the appearance. The sidecar's HTML/CSS snippets are explanatory previews of native components.\n\nDirection history: the delegated workshop used seed `472e554f`, assigning candidate 6, the studio mixing console; the assignment was not evidence of a user preference. Candidates included the Windows performance console, laboratory bench meter, technical field notebook, broadcast monitor, camera settings panel, and railway control desk. The numerical clarity of the type specimen survived, along with fixed state cells, precise rules, efficient rows, alignment, and one real live plot from the other challengers. Their surface compositions were not adopted.",
+    "keyCharacteristics": [
+      "Measured numerical readings and stable table tracks.",
+      "One cyan action channel against restrained dark surfaces.",
+      "Korean action labels, explicit state text, and local feedback.",
+      "A contained widget and a spacious, ruled management view."
+    ],
+    "rules": [
+      {
+        "name": "The Signal Rule",
+        "body": "Pair state color with visible text or a named control. Cyan identifies an action or a measured value; it never promises permanent recovery.",
+        "section": "colors"
+      },
+      {
+        "name": "The Stable Tracks Rule",
+        "body": "Fix data and state columns; let the name column absorb remaining width. Text truncates inside its allocated cell rather than moving adjacent values.",
+        "section": "layout"
+      },
+      {
+        "name": "The Measured Evidence Rule",
+        "body": "Show observed readings and temporary working-set deltas. Empty or newly collected history remains visibly incomplete; it is never filled with invented activity.",
+        "section": "components"
+      }
+    ],
+    "dos": [
+      "**Do** keep numerical and state tracks fixed while names flex and truncate.",
+      "**Do** keep every widget reading, action, and link inside its enclosed surface.",
+      "**Do** retain visible Korean button/header labels and state text, with accessible names for compact icon actions, toolbar controls, switches, and checkboxes.",
+      "**Do** pair caution, error, selection, and progress colors with explicit state text.",
+      "**Do** show only collected history and describe trim results as temporary working-set changes."
+    ],
+    "donts": [
+      "**Don't** imply a score, permanent recovered memory, or automatic repair.",
+      "**Don't** hide essential state or the primary action when the management window is compact.",
+      "**Don't** replace aligned lists with a decorative card grid.",
+      "**Don't** turn seed-only measurements or framework defaults into an unsupported brand claim."
+    ]
+  }
+}

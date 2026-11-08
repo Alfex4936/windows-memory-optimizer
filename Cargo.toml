@@ -1,0 +1,25 @@
+[package]
+name = "memori"
+version = "0.1.4"
+edition = "2024"
+rust-version = "1.92"
+description = "A focused Windows memory and startup manager"
+license = "MIT"
+repository = "https://github.com/Alfex4936/windows-memory-optimizer"
+publish = false
+
+[dependencies]
+eframe = { version = "0.33.3", default-features = false, features = ["default_fonts", "glow", "accesskit"] }
+windows-sys = { version = "0.61.2", features = ["Win32_Foundation", "Win32_Globalization", "Win32_Graphics_Gdi", "Win32_Security", "Win32_System_Threading", "Win32_System_ProcessStatus", "Win32_System_SystemInformation", "Win32_System_RemoteDesktop", "Win32_System_Registry", "Win32_Storage_FileSystem", "Win32_UI_WindowsAndMessaging", "Win32_UI_Shell", "Win32_System_Com"] }
+winreg = "0.55"
+image = { version = "0.25", default-features = false, features = ["png"] }
+raw-window-handle = "0.6"
+
+[build-dependencies]
+winresource = { version = "0.1.34", default-features = false }
+
+[profile.release]
+opt-level = "s"
+lto = "thin"
+strip = true
+codegen-units = 1
