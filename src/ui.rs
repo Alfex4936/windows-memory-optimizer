@@ -86,6 +86,7 @@ pub struct App {
     startup_loaded: bool,
     search: String,
     process_sort: ProcessSort,
+    widget_sort: ProcessSort,
     startup_filter: StartupFilter,
     busy: bool,
     startup_busy: bool,
@@ -116,6 +117,12 @@ fn bytes(n: u64) -> String {
         format!("{:.0} MB", n as f64 / (1024.0 * 1024.0))
     }
 }
+
+fn cpu_usage(value: Option<f32>) -> String {
+    value.map_or_else(|| "—".into(), |percent| format!("{percent:.1}%"))
+}
+
+const CPU_HELP: &str = "최근 측정 구간의 CPU 사용률 · 전체 CPU 용량 기준\n첫 측정이나 조회할 수 없는 경우 —로 표시합니다.";
 
 fn button(ui: &mut egui::Ui, text: &str) -> egui::Response {
     ui.add(egui::Button::new(text).min_size(Vec2::new(0.0, 32.0)))
@@ -401,7 +408,7 @@ pub fn widget_size(compact: bool) -> Vec2 {
     if compact {
         Vec2::new(248.0, 82.0)
     } else {
-        Vec2::new(360.0, 340.0)
+        Vec2::new(380.0, 608.0)
     }
 }
 
@@ -521,19 +528,20 @@ impl App {
         std::thread::Builder::new()
             .name("memori-worker".into())
             .spawn(move || {
+                let mut sampler = memory::Sampler::default();
                 let send = |e| {
                     let _ = events.send(e);
                     repaint.request_repaint();
                 };
-                send(Event::Memory(memory::snapshot()));
+                send(Event::Memory(sampler.sample()));
                 loop {
                     match commands.recv_timeout(Duration::from_secs(2)) {
                         Ok(Command::Refresh) | Err(mpsc::RecvTimeoutError::Timeout) => {
-                            send(Event::Memory(memory::snapshot()))
+                            send(Event::Memory(sampler.sample()))
                         }
                         Ok(Command::Trim(processes)) => {
                             send(Event::Trim(memory::trim(&processes)));
-                            send(Event::Memory(memory::snapshot()));
+                            send(Event::Memory(sampler.sample()));
                         }
                         Ok(Command::Startup) => send(Event::Startup(startup::scan())),
                         Ok(Command::Toggle(entry)) => {
@@ -587,6 +595,7 @@ impl App {
             startup_loaded: false,
             search: String::new(),
             process_sort: ProcessSort::default(),
+            widget_sort: ProcessSort::default(),
             startup_filter: StartupFilter::All,
             busy: false,
             startup_busy: page == Page::Startup,
@@ -937,6 +946,9 @@ impl App {
                 ui.horizontal(|ui| {
                     ui.label(RichText::new(bytes(s.available)).size(29.0).strong().color(INK));
                     ui.label(RichText::new(format!("/ {}",bytes(s.total))).size(13.0).color(MUTED));
+                    ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
+                        ui.label(RichText::new(format!("CPU {}",cpu_usage(s.cpu_percent))).size(12.0).color(INK)).on_hover_text(CPU_HELP);
+                    });
                 });
                 let (strip,_) = ui.allocate_exact_size(Vec2::new(ui.available_width(),18.0),Sense::hover());
                 let used = (s.percent()*40.0).round() as usize;
@@ -962,9 +974,16 @@ impl App {
                 else if stale { "조회 지연 · 잠시 후 다시 시도하세요".into() }
                 else { "앱 사용 시 메모리가 다시 늘어날 수 있어요".into() };
                 ui.add(egui::Label::new(RichText::new(&feedback).size(11.0).color(if stale {WARN} else {MUTED})).truncate()).on_hover_text(feedback);
-                ui.add_space(2.0);
+                ui.add_space(7.0);
+                ui.separator();
+                ui.add_space(5.0);
+                self.widget_processes(ui, &s);
+                ui.add_space(3.0);
                 ui.horizontal(|ui| {
-                    if ui.add(egui::Button::new("관리 화면").frame(false)).clicked() { self.set_widget(ctx,false); }
+                    if ui.add(egui::Button::new("전체 프로세스").frame(false)).clicked() {
+                        self.page = Page::Memory; self.search.clear();
+                        self.process_sort = self.widget_sort; self.set_widget(ctx,false);
+                    }
                     ui.with_layout(Layout::right_to_left(Align::Center),|ui| {
                         if ui.add(egui::Button::new("시작 프로그램").frame(false)).clicked() {
                             self.page = Page::Startup; self.search.clear(); self.set_widget(ctx,false);
@@ -973,6 +992,114 @@ impl App {
                     });
                 });
             });
+    }
+
+    fn widget_processes(&mut self, ui: &mut egui::Ui, snapshot: &Snapshot) {
+        ui.horizontal(|ui| {
+            ui.label(RichText::new("프로세스").size(14.0).strong());
+            ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
+                ui.label(
+                    RichText::new(if self.widget_sort.descending {
+                        "상위 5개 · 내 계정"
+                    } else {
+                        "하위 5개 · 내 계정"
+                    })
+                    .size(11.0)
+                    .color(MUTED),
+                );
+            });
+        });
+        let name_width = (ui.available_width() - 156.0).max(80.0);
+        ui.horizontal(|ui| {
+            cell(
+                ui,
+                name_width,
+                30.0,
+                RichText::new("앱 이름").size(11.0).color(MUTED),
+                Align::LEFT,
+            );
+            sort_header(
+                ui,
+                &mut self.widget_sort,
+                Column::Cpu,
+                "CPU",
+                58.0,
+                Align::RIGHT,
+            );
+            sort_header(
+                ui,
+                &mut self.widget_sort,
+                Column::Memory,
+                "RAM",
+                82.0,
+                Align::RIGHT,
+            );
+        });
+        let mut rows: Vec<_> = snapshot.processes.iter().collect();
+        self.widget_sort.sort(&mut rows);
+        if rows.is_empty() {
+            ui.add_sized(
+                [ui.available_width(), 154.0],
+                egui::Label::new(
+                    RichText::new("조회할 수 있는 프로세스가 없습니다")
+                        .size(12.0)
+                        .color(MUTED),
+                ),
+            );
+        } else {
+            ui.scope(|ui| {
+                ui.spacing_mut().item_spacing.y = 4.0;
+                for process in rows.iter().take(5) {
+                    ui.push_id((process.pid, process.created), |ui| {
+                        ui.horizontal(|ui| {
+                            cell(
+                                ui,
+                                name_width,
+                                28.0,
+                                RichText::new(&process.name).size(12.0).color(INK),
+                                Align::LEFT,
+                            )
+                            .on_hover_text(format!(
+                                "{} · PID {}\n{}",
+                                process.name, process.pid, process.path
+                            ));
+                            cell(
+                                ui,
+                                58.0,
+                                28.0,
+                                RichText::new(cpu_usage(process.cpu_percent))
+                                    .size(12.0)
+                                    .color(if process.cpu_percent.is_some() {
+                                        INK
+                                    } else {
+                                        MUTED
+                                    }),
+                                Align::RIGHT,
+                            )
+                            .on_hover_text(CPU_HELP);
+                            cell(
+                                ui,
+                                82.0,
+                                28.0,
+                                RichText::new(bytes(process.bytes))
+                                    .size(12.0)
+                                    .strong()
+                                    .color(if self.widget_sort.column == Column::Memory {
+                                        ACCENT
+                                    } else {
+                                        INK
+                                    }),
+                                Align::RIGHT,
+                            )
+                            .on_hover_text("RAM 작업 집합 · 공유 페이지를 포함합니다");
+                        });
+                    });
+                }
+                if rows.len() < 5 {
+                    ui.add_space((5 - rows.len()) as f32 * 32.0);
+                }
+            });
+        }
     }
 
     fn sidebar(&mut self, ctx: &egui::Context) {
@@ -1125,12 +1252,14 @@ impl App {
             .on_hover_text(
                 "Windows가 프로세스에 약속한 메모리 / RAM과 페이지 파일을 합친 커밋 한도",
             );
+            ui.label(RichText::new(format!("  /  CPU {}", cpu_usage(s.cpu_percent))).color(INK))
+                .on_hover_text(CPU_HELP);
         });
         ui.add_space(20.0);
         ui.separator();
         ui.add_space(10.0);
         ui.horizontal(|ui| {
-            ui.label(RichText::new("앱별 메모리").size(19.0).strong());
+            ui.label(RichText::new("프로세스").size(19.0).strong());
             ui.label(
                 RichText::new(format!("{}개 프로세스", s.processes.len()))
                     .small()
@@ -1142,6 +1271,7 @@ impl App {
                     match self.process_sort.column {
                         Column::Name => "앱 이름",
                         Column::Pid => "PID",
+                        Column::Cpu => "CPU",
                         Column::Memory => "작업 집합",
                         Column::Status => "정리 상태",
                     },
@@ -1204,7 +1334,7 @@ impl App {
                     }
                 }
             }
-            let name_width = (ui.available_width() - if narrow { 192.0 } else { 342.0 }).max(80.0);
+            let name_width = (ui.available_width() - if narrow { 278.0 } else { 428.0 }).max(80.0);
             sort_header(
                 ui,
                 &mut self.process_sort,
@@ -1219,6 +1349,14 @@ impl App {
                 Column::Pid,
                 "PID",
                 72.0,
+                Align::RIGHT,
+            );
+            sort_header(
+                ui,
+                &mut self.process_sort,
+                Column::Cpu,
+                "CPU",
+                76.0,
                 Align::RIGHT,
             );
             sort_header(
@@ -1281,7 +1419,7 @@ impl App {
                                     self.selected.remove(&(p.pid, p.created));
                                 }
                             }
-                            let reserved = if narrow { 192.0 } else { 342.0 };
+                            let reserved = if narrow { 278.0 } else { 428.0 };
                             cell(
                                 ui,
                                 (ui.available_width() - reserved).max(80.0),
@@ -1297,6 +1435,15 @@ impl App {
                                 RichText::new(p.pid.to_string()).color(MUTED),
                                 Align::RIGHT,
                             );
+                            cell(
+                                ui,
+                                76.0,
+                                28.0,
+                                RichText::new(cpu_usage(p.cpu_percent))
+                                    .color(if p.cpu_percent.is_some() { INK } else { MUTED }),
+                                Align::RIGHT,
+                            )
+                            .on_hover_text(CPU_HELP);
                             cell(
                                 ui,
                                 100.0,

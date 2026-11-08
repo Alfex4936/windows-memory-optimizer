@@ -1,4 +1,5 @@
 use std::{
+    collections::HashMap,
     mem::{size_of, zeroed},
     path::Path,
     time::SystemTime,
@@ -14,9 +15,9 @@ use windows_sys::Win32::{
         RemoteDesktop::ProcessIdToSessionId,
         SystemInformation::{GlobalMemoryStatusEx, MEMORYSTATUSEX},
         Threading::{
-            GetCurrentProcess, GetCurrentProcessId, GetProcessTimes, OpenProcess, OpenProcessToken,
-            PROCESS_QUERY_LIMITED_INFORMATION, PROCESS_SET_QUOTA, PROCESS_VM_READ,
-            QueryFullProcessImageNameW,
+            GetActiveProcessorGroupCount, GetCurrentProcess, GetCurrentProcessId, GetProcessTimes,
+            GetSystemTimes, OpenProcess, OpenProcessToken, PROCESS_QUERY_LIMITED_INFORMATION,
+            PROCESS_SET_QUOTA, PROCESS_VM_READ, QueryFullProcessImageNameW,
         },
     },
     UI::WindowsAndMessaging::{GetForegroundWindow, GetWindowThreadProcessId},
@@ -37,6 +38,7 @@ pub struct Process {
     pub name: String,
     pub path: String,
     pub bytes: u64,
+    pub cpu_percent: Option<f32>,
     pub created: u64,
     pub eligible: bool,
     pub reason: String,
@@ -48,6 +50,7 @@ pub struct Snapshot {
     pub available: u64,
     pub commit: u64,
     pub commit_limit: u64,
+    pub cpu_percent: Option<f32>,
     pub processes: Vec<Process>,
     pub at: SystemTime,
 }
@@ -114,11 +117,72 @@ fn working_set(handle: HANDLE) -> Option<u64> {
 }
 
 fn created(handle: HANDLE) -> Option<u64> {
+    process_times(handle).map(|(created, _)| created)
+}
+
+fn ticks(time: FILETIME) -> u64 {
+    ((time.dwHighDateTime as u64) << 32) | time.dwLowDateTime as u64
+}
+
+fn process_times(handle: HANDLE) -> Option<(u64, u64)> {
     unsafe {
         let mut times: [FILETIME; 4] = zeroed();
         let [c, e, k, u] = &mut times;
         (GetProcessTimes(handle, c, e, k, u) != 0)
-            .then_some(((c.dwHighDateTime as u64) << 32) | c.dwLowDateTime as u64)
+            .then(|| (ticks(*c), ticks(*k).saturating_add(ticks(*u))))
+    }
+}
+
+#[derive(Clone, Copy)]
+struct SystemTimes {
+    idle: u64,
+    total: u64,
+}
+
+fn system_times() -> Option<SystemTimes> {
+    unsafe {
+        // shortcut: CPU is unavailable with multiple groups; add group-aware sampling when supporting those workstations.
+        if GetActiveProcessorGroupCount() != 1 {
+            return None;
+        }
+        let [mut idle, mut kernel, mut user]: [FILETIME; 3] = zeroed();
+        (GetSystemTimes(&mut idle, &mut kernel, &mut user) != 0).then(|| SystemTimes {
+            idle: ticks(idle),
+            total: ticks(kernel).saturating_add(ticks(user)),
+        })
+    }
+}
+
+#[derive(Default)]
+pub struct Sampler {
+    system: Option<SystemTimes>,
+    processes: HashMap<(u32, u64), u64>,
+}
+
+impl Sampler {
+    fn update_cpu(
+        &mut self,
+        system: Option<SystemTimes>,
+        counters: HashMap<(u32, u64), u64>,
+        processes: &mut [Process],
+    ) -> Option<f32> {
+        let previous = std::mem::replace(&mut self.system, system);
+        let interval = previous.zip(system).and_then(|(before, after)| {
+            let total = after.total.checked_sub(before.total)?;
+            let idle = after.idle.checked_sub(before.idle)?;
+            (total > 0 && idle <= total).then_some((total, idle))
+        });
+        for process in processes {
+            let identity = (process.pid, process.created);
+            process.cpu_percent = interval.and_then(|(total, _)| {
+                let before = self.processes.get(&identity)?;
+                let after = counters.get(&identity)?;
+                let elapsed = after.checked_sub(*before)?;
+                Some((elapsed as f64 * 100.0 / total as f64).clamp(0.0, 100.0) as f32)
+            });
+        }
+        self.processes = counters;
+        interval.map(|(total, idle)| ((total - idle) as f64 * 100.0 / total as f64) as f32)
     }
 }
 
@@ -179,92 +243,105 @@ fn blocked_reason(pid: u32, name: &str, path: &str, foreground: u32) -> Option<&
     None
 }
 
-pub fn snapshot() -> Result<Snapshot, String> {
-    unsafe {
-        let mut mem: MEMORYSTATUSEX = zeroed();
-        mem.dwLength = size_of::<MEMORYSTATUSEX>() as u32;
-        if GlobalMemoryStatusEx(&mut mem) == 0 {
-            return Err(error("메모리 정보를 읽지 못했습니다"));
-        }
-        let mut perf: PERFORMANCE_INFORMATION = zeroed();
-        if K32GetPerformanceInfo(&mut perf, size_of::<PERFORMANCE_INFORMATION>() as u32) == 0 {
-            return Err(error("커밋 정보를 읽지 못했습니다"));
-        }
-        let owner = sid(GetCurrentProcess()).ok_or("현재 사용자 확인 실패")?;
-        let mut own_session = 0;
-        if ProcessIdToSessionId(GetCurrentProcessId(), &mut own_session) == 0 {
-            return Err(error("세션 확인 실패"));
-        }
-        let mut ids = vec![0u32; 2048];
-        let mut needed = 0;
-        loop {
-            if K32EnumProcesses(ids.as_mut_ptr(), (ids.len() * 4) as u32, &mut needed) == 0 {
-                return Err(error("프로세스 목록 확인 실패"));
+impl Sampler {
+    pub fn sample(&mut self) -> Result<Snapshot, String> {
+        unsafe {
+            let mut mem: MEMORYSTATUSEX = zeroed();
+            mem.dwLength = size_of::<MEMORYSTATUSEX>() as u32;
+            if GlobalMemoryStatusEx(&mut mem) == 0 {
+                return Err(error("메모리 정보를 읽지 못했습니다"));
             }
-            if needed as usize / 4 < ids.len() {
-                break;
+            let mut perf: PERFORMANCE_INFORMATION = zeroed();
+            if K32GetPerformanceInfo(&mut perf, size_of::<PERFORMANCE_INFORMATION>() as u32) == 0 {
+                return Err(error("커밋 정보를 읽지 못했습니다"));
             }
-            ids.resize(ids.len() * 2, 0);
-        }
-        ids.truncate(needed as usize / 4);
-        let foreground = protected_foreground_pid();
-        let mut processes = Vec::new();
-        for pid in ids {
-            let mut session = 0;
-            if ProcessIdToSessionId(pid, &mut session) == 0 || session != own_session {
-                continue;
+            let owner = sid(GetCurrentProcess()).ok_or("현재 사용자 확인 실패")?;
+            let mut own_session = 0;
+            if ProcessIdToSessionId(GetCurrentProcessId(), &mut own_session) == 0 {
+                return Err(error("세션 확인 실패"));
             }
-            let raw = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION | PROCESS_VM_READ, 0, pid);
-            if raw.is_null() {
-                continue;
+            let mut ids = vec![0u32; 2048];
+            let mut needed = 0;
+            loop {
+                if K32EnumProcesses(ids.as_mut_ptr(), (ids.len() * 4) as u32, &mut needed) == 0 {
+                    return Err(error("프로세스 목록 확인 실패"));
+                }
+                if needed as usize / 4 < ids.len() {
+                    break;
+                }
+                ids.resize(ids.len() * 2, 0);
             }
-            let handle = Handle(raw);
-            if sid(handle.0).as_ref() != Some(&owner) {
-                continue;
-            }
-            let mut path = vec![0u16; 32768];
-            let mut len = path.len() as u32;
-            if QueryFullProcessImageNameW(handle.0, 0, path.as_mut_ptr(), &mut len) == 0 {
-                continue;
-            }
-            let path = String::from_utf16_lossy(&path[..len as usize]);
-            let name = Path::new(&path)
-                .file_name()
-                .unwrap_or_default()
-                .to_string_lossy()
-                .into_owned();
-            let Some(bytes) = working_set(handle.0) else {
-                continue;
-            };
-            let Some(created) = created(handle.0) else {
-                continue;
-            };
-            let reason =
-                blocked_reason(pid, &name, &path, foreground).or(if bytes < 16 * 1024 * 1024 {
-                    Some("16 MB 미만")
-                } else {
-                    None
+            ids.truncate(needed as usize / 4);
+            let foreground = protected_foreground_pid();
+            let system = system_times();
+            let mut counters = HashMap::new();
+            let mut processes = Vec::new();
+            for pid in ids {
+                let mut session = 0;
+                if ProcessIdToSessionId(pid, &mut session) == 0 || session != own_session {
+                    continue;
+                }
+                let raw = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION | PROCESS_VM_READ, 0, pid);
+                if raw.is_null() {
+                    continue;
+                }
+                let handle = Handle(raw);
+                if sid(handle.0).as_ref() != Some(&owner) {
+                    continue;
+                }
+                let mut path = vec![0u16; 32768];
+                let mut len = path.len() as u32;
+                if QueryFullProcessImageNameW(handle.0, 0, path.as_mut_ptr(), &mut len) == 0 {
+                    continue;
+                }
+                let path = String::from_utf16_lossy(&path[..len as usize]);
+                let name = Path::new(&path)
+                    .file_name()
+                    .unwrap_or_default()
+                    .to_string_lossy()
+                    .into_owned();
+                let Some(bytes) = working_set(handle.0) else {
+                    continue;
+                };
+                let Some((created, cpu_time)) = process_times(handle.0) else {
+                    continue;
+                };
+                counters.insert((pid, created), cpu_time);
+                let reason =
+                    blocked_reason(pid, &name, &path, foreground).or(if bytes < 16 * 1024 * 1024 {
+                        Some("16 MB 미만")
+                    } else {
+                        None
+                    });
+                processes.push(Process {
+                    pid,
+                    name,
+                    path,
+                    bytes,
+                    cpu_percent: None,
+                    created,
+                    eligible: reason.is_none(),
+                    reason: reason.unwrap_or("선택하여 정리").into(),
                 });
-            processes.push(Process {
-                pid,
-                name,
-                path,
-                bytes,
-                created,
-                eligible: reason.is_none(),
-                reason: reason.unwrap_or("선택하여 정리").into(),
-            });
+            }
+            processes.sort_by_key(|p| std::cmp::Reverse(p.bytes));
+            let cpu_percent = self.update_cpu(system, counters, &mut processes);
+            Ok(Snapshot {
+                total: mem.ullTotalPhys,
+                available: mem.ullAvailPhys,
+                commit: perf.CommitTotal as u64 * perf.PageSize as u64,
+                commit_limit: perf.CommitLimit as u64 * perf.PageSize as u64,
+                cpu_percent,
+                processes,
+                at: SystemTime::now(),
+            })
         }
-        processes.sort_by_key(|p| std::cmp::Reverse(p.bytes));
-        Ok(Snapshot {
-            total: mem.ullTotalPhys,
-            available: mem.ullAvailPhys,
-            commit: perf.CommitTotal as u64 * perf.PageSize as u64,
-            commit_limit: perf.CommitLimit as u64 * perf.PageSize as u64,
-            processes,
-            at: SystemTime::now(),
-        })
     }
+}
+
+#[cfg(test)]
+fn snapshot() -> Result<Snapshot, String> {
+    Sampler::default().sample()
 }
 
 fn trim_one(process: &Process) -> Result<u64, String> {
@@ -332,6 +409,98 @@ pub fn trim(processes: &[Process]) -> TrimResult {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn cpu_process(pid: u32, created: u64) -> Process {
+        Process {
+            pid,
+            created,
+            name: "test.exe".into(),
+            path: "D:\\test.exe".into(),
+            bytes: 0,
+            cpu_percent: None,
+            eligible: false,
+            reason: "test".into(),
+        }
+    }
+
+    #[test]
+    fn cpu_sampling_warms_up_and_reports_total_machine_capacity() {
+        let mut sampler = Sampler::default();
+        let mut rows = [cpu_process(1, 10)];
+        assert_eq!(
+            sampler.update_cpu(
+                Some(SystemTimes {
+                    idle: 100,
+                    total: 1000
+                }),
+                HashMap::from([((1, 10), 100)]),
+                &mut rows
+            ),
+            None
+        );
+        assert_eq!(rows[0].cpu_percent, None);
+        // 800 total ticks include every logical CPU; idle time is already part of total.
+        assert_eq!(
+            sampler.update_cpu(
+                Some(SystemTimes {
+                    idle: 300,
+                    total: 1800
+                }),
+                HashMap::from([((1, 10), 300)]),
+                &mut rows
+            ),
+            Some(75.0)
+        );
+        assert_eq!(rows[0].cpu_percent, Some(25.0));
+    }
+
+    #[test]
+    fn cpu_sampling_handles_pid_reuse_missing_counters_and_removes_exited_processes() {
+        let mut sampler = Sampler::default();
+        let mut rows = [cpu_process(1, 10), cpu_process(2, 20), cpu_process(3, 30)];
+        sampler.update_cpu(
+            Some(SystemTimes {
+                idle: 10,
+                total: 100,
+            }),
+            HashMap::from([((1, 10), 10), ((2, 20), 20), ((3, 30), 30)]),
+            &mut rows,
+        );
+        rows[0].created = 11;
+        sampler.update_cpu(
+            Some(SystemTimes {
+                idle: 20,
+                total: 200,
+            }),
+            HashMap::from([((1, 11), 500), ((2, 20), 20)]),
+            &mut rows,
+        );
+        assert_eq!(rows[0].cpu_percent, None);
+        assert_eq!(rows[1].cpu_percent, Some(0.0));
+        assert_eq!(rows[2].cpu_percent, None);
+        assert_eq!(sampler.processes.len(), 2);
+        assert!(!sampler.processes.contains_key(&(1, 10)));
+    }
+
+    #[test]
+    fn cpu_sampling_rejects_invalid_intervals_and_recovers_after_unavailability() {
+        let mut sampler = Sampler::default();
+        let mut rows = [cpu_process(1, 10)];
+        let mut sample = |system, counter| {
+            let result = sampler.update_cpu(system, HashMap::from([((1, 10), counter)]), &mut rows);
+            (result, rows[0].cpu_percent)
+        };
+        let time = |idle, total| Some(SystemTimes { idle, total });
+        assert_eq!(sample(time(10, 100), 50), (None, None));
+        assert_eq!(sample(time(10, 100), 60), (None, None));
+        assert_eq!(sample(time(20, 90), 70), (None, None));
+        assert_eq!(sample(time(200, 100), 80), (None, None));
+        assert_eq!(sample(None, 90), (None, None));
+        assert_eq!(sample(time(10, 100), 100), (None, None));
+        assert_eq!(sample(time(10, 200), 10), (Some(100.0), None));
+        assert_eq!(sample(time(20, 300), 1000), (Some(90.0), Some(100.0)));
+    }
+
     #[test]
     fn actual_memory_and_protected_processes() {
         let s = snapshot().unwrap();

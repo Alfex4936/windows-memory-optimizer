@@ -17,10 +17,10 @@ Windows users who want focused RAM monitoring, manual working-set trimming, and 
 ## Workflows
 
 - Compact widget: RAM usage, a manual trim action, and expansion.
-- Expanded widget: memory readings, direct cleanup, and links to detailed management.
+- Expanded widget: memory and total CPU readings, top-five process CPU/RAM with sortable columns, direct cleanup, and links to detailed management.
 - Remember widget position, always-on-top setting, and compact/expanded mode. Restore safely after monitor changes.
 - Use a nonselectable native drag header; keep action buttons independent.
-- Sort process rows by name, numeric PID, working set, and eligibility/reason in either direction. Preserve selected process identities through sorting and refresh.
+- Sort process rows by name, numeric PID, CPU, working set, and eligibility/reason in either direction. Preserve selected process identities through sorting and refresh.
 - Filter startup entries by enabled, disabled, and uncertain state. Pair visible state text with color and use switches only for directly manageable entries.
 - Show command details in a distinct full-width panel with selected-row emphasis; close by button, Escape, or selecting the same row again.
 - Register login autostart only after an explicit user action and allow it to be disabled.

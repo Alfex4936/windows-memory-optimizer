@@ -5,6 +5,7 @@ pub enum Column {
     Name,
     Pid,
     Memory,
+    Cpu,
     Status,
 }
 
@@ -28,17 +29,24 @@ impl ProcessSort {
         self.descending = if self.column == column {
             !self.descending
         } else {
-            column == Column::Memory
+            matches!(column, Column::Memory | Column::Cpu)
         };
         self.column = column;
     }
 
     pub fn sort(&self, processes: &mut [&Process]) {
         processes.sort_by(|a, b| {
+            if self.column == Column::Cpu && a.cpu_percent.is_some() != b.cpu_percent.is_some() {
+                return b.cpu_percent.is_some().cmp(&a.cpu_percent.is_some());
+            }
             let order = match self.column {
                 Column::Name => a.name.to_lowercase().cmp(&b.name.to_lowercase()),
                 Column::Pid => a.pid.cmp(&b.pid),
                 Column::Memory => a.bytes.cmp(&b.bytes),
+                Column::Cpu => a
+                    .cpu_percent
+                    .unwrap_or(0.0)
+                    .total_cmp(&b.cpu_percent.unwrap_or(0.0)),
                 Column::Status => (!a.eligible, &a.reason).cmp(&(!b.eligible, &b.reason)),
             };
             let order = if self.descending {
@@ -63,10 +71,38 @@ mod tests {
             name: name.into(),
             path: format!(r"D:\Apps\{name}"),
             bytes,
+            cpu_percent: None,
             created: u64::from(pid),
             eligible,
             reason: reason.into(),
         }
+    }
+
+    #[test]
+    fn cpu_sort_uses_numeric_values_keeps_unknown_last_and_stable_identity_ties() {
+        let mut source = [
+            process(10, "app.exe", 1, true, "ready"),
+            process(1, "app.exe", 1, true, "ready"),
+            process(2, "app.exe", 1, true, "ready"),
+            process(3, "app.exe", 1, true, "ready"),
+        ];
+        source[0].cpu_percent = Some(2.5);
+        source[1].cpu_percent = Some(10.0);
+        source[2].cpu_percent = Some(2.5);
+        for (descending, expected) in [(false, [2, 10, 1, 3]), (true, [1, 2, 10, 3])] {
+            let mut rows: Vec<_> = source.iter().collect();
+            ProcessSort {
+                column: Column::Cpu,
+                descending,
+            }
+            .sort(&mut rows);
+            assert_eq!(rows.iter().map(|p| p.pid).collect::<Vec<_>>(), expected);
+        }
+        let mut sort = ProcessSort::default();
+        sort.select(Column::Cpu);
+        assert!(sort.descending);
+        sort.select(Column::Cpu);
+        assert!(!sort.descending);
     }
 
     #[test]
