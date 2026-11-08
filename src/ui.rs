@@ -791,6 +791,26 @@ impl App {
         }
     }
 
+    fn widget_drag(
+        &self,
+        ui: &mut egui::Ui,
+        ctx: &egui::Context,
+        header: Rect,
+        inset: f32,
+    ) -> egui::Response {
+        let caption = window::caption_rect(ui.max_rect().min, header, inset);
+        let response = ui.interact(caption, ui.id().with("widget_caption"), Sense::drag());
+        if let Some(region) = &self.drag_region {
+            region.set(Some(caption), ctx.pixels_per_point());
+            response
+        } else {
+            if response.is_pointer_button_down_on() && ui.input(|i| i.pointer.primary_down()) {
+                ctx.send_viewport_cmd(egui::ViewportCommand::StartDrag);
+            }
+            response.on_hover_cursor(egui::CursorIcon::Grab)
+        }
+    }
+
     fn compact_widget(&mut self, ctx: &egui::Context) {
         egui::CentralPanel::default()
             .frame(
@@ -805,17 +825,11 @@ impl App {
                 ui.spacing_mut().item_spacing = Vec2::new(8.0, 0.0);
                 ui.style_mut().interaction.selectable_labels = false;
                 ui.horizontal(|ui| {
-                    let (header, drag) = ui.allocate_exact_size(
+                    let (header, _) = ui.allocate_exact_size(
                         Vec2::new(ui.available_width() - 80.0, 40.0),
-                        Sense::drag(),
+                        Sense::hover(),
                     );
-                    if let Some(region) = &self.drag_region {
-                        region.set(Some(header), ctx.pixels_per_point());
-                    } else if drag.is_pointer_button_down_on()
-                        && ui.input(|i| i.pointer.primary_down())
-                    {
-                        ctx.send_viewport_cmd(egui::ViewportCommand::StartDrag);
-                    }
+                    let drag = self.widget_drag(ui, ctx, header, 12.0);
                     let stale = self.snapshot.as_ref().is_none_or(|s| {
                         s.at.elapsed()
                             .map_or(true, |age| age > Duration::from_secs(10))
@@ -864,8 +878,7 @@ impl App {
                     } else {
                         "메모리를 읽고 있습니다".into()
                     };
-                    drag.on_hover_text(tooltip)
-                        .on_hover_cursor(egui::CursorIcon::Grab);
+                    drag.on_hover_text(tooltip);
                     let targets: Vec<_> = self
                         .snapshot
                         .iter()
@@ -914,15 +927,14 @@ impl App {
                 ui.spacing_mut().item_spacing = Vec2::new(8.0,6.0);
                 ui.style_mut().interaction.selectable_labels = false;
                 ui.horizontal(|ui| {
-                    let (header,drag) = ui.allocate_exact_size(Vec2::new(ui.available_width()-108.0,28.0),Sense::drag());
+                    let (header,_) = ui.allocate_exact_size(Vec2::new(ui.available_width()-108.0,28.0),Sense::hover());
+                    let drag = self.widget_drag(ui, ctx, header, 22.0);
                     drag.widget_info(||egui::WidgetInfo::labeled(egui::WidgetType::Other,true,"위젯 이동 영역"));
                     for (i,h) in [10.0,20.0,14.0].iter().enumerate() {
                         ui.painter().rect_filled(Rect::from_min_size(Pos2::new(header.left()+i as f32*7.0,header.center().y+10.0-h),Vec2::new(4.0,*h)),2.0,ACCENT);
                     }
                     ui.painter().text(Pos2::new(header.left()+31.0,header.center().y),Align2::LEFT_CENTER,"memori",FontId::proportional(20.0),INK);
-                    if let Some(region)=&self.drag_region {region.set(Some(header),ctx.pixels_per_point());}
-                    else if drag.is_pointer_button_down_on() && ui.input(|i|i.pointer.primary_down()) {ctx.send_viewport_cmd(egui::ViewportCommand::StartDrag);}
-                    drag.on_hover_cursor(egui::CursorIcon::Grab).on_hover_text("상단을 잡아 위젯 이동");
+                    drag.on_hover_text("상단 여백·로고·이름을 잡아 위젯 이동");
                     if icon_button(ui,Icon::Collapse,false,"컴팩트 모드로 접기").clicked() {self.set_compact(ctx,true);}
                     if icon_button(ui, Icon::Pin, self.pinned, "항상 위에 표시").clicked() {
                         self.preferences.pinned = !self.pinned;

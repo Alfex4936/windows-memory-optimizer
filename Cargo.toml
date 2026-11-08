@@ -1,6 +1,6 @@
 [package]
 name = "memori"
-version = "0.1.5"
+version = "0.1.6"
 edition = "2024"
 rust-version = "1.92"
 description = "A focused Windows memory and startup manager"

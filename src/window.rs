@@ -8,8 +8,9 @@ use windows_sys::Win32::{
     UI::{
         Shell::{DefSubclassProc, RemoveWindowSubclass, SetWindowSubclass},
         WindowsAndMessaging::{
-            GetWindowRect, HTCAPTION, IsIconic, SWP_NOACTIVATE, SWP_NOSIZE, SWP_NOZORDER,
-            SetWindowPos, WM_NCHITTEST, WM_NCLBUTTONDBLCLK,
+            GetWindowRect, HTCAPTION, IDC_SIZEALL, IsIconic, LoadCursorW, SWP_NOACTIVATE,
+            SWP_NOSIZE, SWP_NOZORDER, SetCursor, SetWindowPos, WM_NCHITTEST, WM_NCLBUTTONDBLCLK,
+            WM_SETCURSOR,
         },
     },
 };
@@ -17,6 +18,17 @@ use windows_sys::Win32::{
 pub struct DragRegion {
     window: HWND,
     region: Box<Cell<RECT>>,
+}
+
+pub fn caption_rect(
+    content_origin: eframe::egui::Pos2,
+    header: eframe::egui::Rect,
+    inset: f32,
+) -> eframe::egui::Rect {
+    eframe::egui::Rect::from_min_max(
+        content_origin - eframe::egui::Vec2::splat(inset),
+        header.max,
+    )
 }
 
 impl DragRegion {
@@ -57,6 +69,18 @@ unsafe extern "system" fn header_proc(
     _: usize,
     data: usize,
 ) -> LRESULT {
+    if message == WM_SETCURSOR && lparam as u16 == HTCAPTION as u16 && data != 0 {
+        let region = unsafe { &*(data as *const Cell<RECT>) }.get();
+        if region.right > region.left {
+            let cursor = unsafe { LoadCursorW(std::ptr::null_mut(), IDC_SIZEALL) };
+            if !cursor.is_null() {
+                unsafe {
+                    SetCursor(cursor);
+                }
+                return 1;
+            }
+        }
+    }
     if message == WM_NCHITTEST && data != 0 {
         let mut point = POINT {
             x: (lparam as u32 as u16 as i16) as i32,
@@ -149,6 +173,30 @@ pub fn restore(window: Option<HWND>, position: [i32; 2]) -> Result<[i32; 2], Str
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn caption_includes_top_padding_and_excludes_widget_buttons() {
+        use eframe::egui::{Rect, pos2};
+        let expanded = caption_rect(
+            pos2(30.0, 30.0),
+            Rect::from_min_max(pos2(30.0, 32.0), pos2(242.0, 60.0)),
+            22.0,
+        );
+        assert!(expanded.contains(pos2(180.0, 20.0)));
+        assert!(expanded.contains(pos2(40.0, 44.0)));
+        assert_eq!(expanded.min, pos2(8.0, 8.0));
+        assert!(!expanded.contains(pos2(263.0, 46.0)));
+        assert!(!expanded.contains(pos2(300.0, 46.0)));
+        assert!(!expanded.contains(pos2(335.0, 46.0)));
+        assert!(!expanded.contains(pos2(180.0, 92.0)));
+        let compact = caption_rect(
+            pos2(20.0, 20.0),
+            Rect::from_min_max(pos2(20.0, 20.0), pos2(148.0, 60.0)),
+            12.0,
+        );
+        assert!(compact.contains(pos2(80.0, 12.0)));
+        assert!(!compact.contains(pos2(168.0, 40.0)));
+        assert!(!compact.contains(pos2(210.0, 40.0)));
+    }
     #[test]
     fn position_stays_on_screen_after_monitor_changes() {
         let work = RECT {
