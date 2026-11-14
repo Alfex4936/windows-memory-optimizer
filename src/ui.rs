@@ -1626,9 +1626,6 @@ impl App {
                 );
             });
         }
-        ui.collapsing("개별 파일 선택", |ui| {
-            Self::cleanup_file_list(ui, review)
-        });
         let mut confirm = false;
         ui.horizontal_wrapped(|ui| {
             confirm = ui
@@ -1650,6 +1647,9 @@ impl App {
                 review.picked = [(0, 0); 2];
                 confirm = false;
             }
+        });
+        ui.collapsing("개별 파일 선택", |ui| {
+            Self::cleanup_file_list(ui, review)
         });
         confirm
     }
@@ -1686,13 +1686,6 @@ impl App {
         if changed {
             review.filter();
         }
-        if review.visible.len() != review.report.items.len() && !review.selected.is_empty() {
-            ui.label(
-                RichText::new("검색을 바꿔도 이전 선택이 유지됩니다.")
-                    .small()
-                    .color(MUTED),
-            );
-        }
         if review.visible.is_empty() {
             ui.label(RichText::new("일치하는 파일이 없습니다.").color(MUTED));
             return;
@@ -1702,18 +1695,21 @@ impl App {
                 RichText::new(format!("검색 결과 {}개", review.visible.len()))
                     .small()
                     .color(MUTED),
-            );
+            )
+            .on_hover_text("검색을 바꿔도 이전에 체크한 파일은 최종 선택에 포함됩니다.");
             if ui
                 .add(egui::Button::new("결과 모두 선택").frame(false))
                 .clicked()
             {
                 review.select_visible(true);
+                ui.ctx().request_repaint();
             }
             if ui
                 .add(egui::Button::new("결과 선택 해제").frame(false))
                 .clicked()
             {
                 review.select_visible(false);
+                ui.ctx().request_repaint();
             }
         });
         let mut list = egui::ScrollArea::vertical()
@@ -1765,6 +1761,7 @@ impl App {
                     .inner;
                 if changed {
                     review.select(index, selected);
+                    ui.ctx().request_repaint();
                 }
             }
         });
