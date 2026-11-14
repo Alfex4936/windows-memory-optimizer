@@ -1,5 +1,6 @@
 use crate::{
     memory::{self, Process, Snapshot, TrimResult},
+    optimization::{self, Drive, PowerPolicy},
     preferences::{self, Preferences},
     sort::{Column, ProcessSort},
     startup::{self, StartupEntry, StartupState},
@@ -29,6 +30,17 @@ const ERROR: Color32 = Color32::from_rgb(242, 155, 155);
 enum Page {
     Memory,
     Startup,
+    Optimization,
+}
+
+impl Page {
+    fn title(self) -> &'static str {
+        match self {
+            Self::Memory => "메모리",
+            Self::Startup => "시작 프로그램",
+            Self::Optimization => "최적화",
+        }
+    }
 }
 
 #[derive(Clone, Copy, PartialEq)]
@@ -56,12 +68,17 @@ enum Command {
     Trim(Vec<Process>),
     Startup,
     Toggle(StartupEntry),
+    ReadPower(Process),
+    SetPower(Process, PowerPolicy, PowerPolicy),
+    Storage,
 }
 enum Event {
     Memory(Result<Snapshot, String>),
     Trim(TrimResult),
     Startup(Result<Vec<StartupEntry>, String>),
     Changed(Result<String, String>),
+    Power(Result<PowerPolicy, String>),
+    Storage(Result<Vec<Drive>, String>),
 }
 
 pub struct App {
@@ -90,6 +107,11 @@ pub struct App {
     startup_filter: StartupFilter,
     busy: bool,
     startup_busy: bool,
+    power_target: Option<(u32, u64)>,
+    power: Option<Result<PowerPolicy, String>>,
+    power_busy: bool,
+    storage: Option<Result<Vec<Drive>, String>>,
+    storage_busy: bool,
     notice: Option<(String, bool)>,
     failures: Vec<String>,
     details: Option<String>,
@@ -445,9 +467,9 @@ fn management_position(ctx: &egui::Context) -> Option<Pos2> {
     }
 }
 
-fn open_startup_settings() -> Result<(), String> {
+fn open_windows_settings(uri: &str) -> bool {
     use windows_sys::Win32::UI::{Shell::ShellExecuteW, WindowsAndMessaging::SW_SHOWNORMAL};
-    let uri: Vec<u16> = "ms-settings:startupapps\0".encode_utf16().collect();
+    let uri: Vec<u16> = uri.encode_utf16().chain(Some(0)).collect();
     let action: Vec<u16> = "open\0".encode_utf16().collect();
     let result = unsafe {
         ShellExecuteW(
@@ -459,14 +481,7 @@ fn open_startup_settings() -> Result<(), String> {
             SW_SHOWNORMAL,
         )
     };
-    if result as usize <= 32 {
-        Err(
-            "Windows 시작 앱 설정을 열지 못했습니다. 설정 > 앱 > 시작 프로그램을 열어 주세요."
-                .into(),
-        )
-    } else {
-        Ok(())
-    }
+    result as usize > 32
 }
 
 impl App {
@@ -548,6 +563,15 @@ impl App {
                             send(Event::Changed(startup::toggle(&entry)));
                             send(Event::Startup(startup::scan()));
                         }
+                        Ok(Command::ReadPower(process)) => {
+                            send(Event::Power(optimization::power_policy(&process)));
+                        }
+                        Ok(Command::SetPower(process, expected, desired)) => {
+                            send(Event::Power(optimization::set_power_policy(
+                                &process, expected, desired,
+                            )));
+                        }
+                        Ok(Command::Storage) => send(Event::Storage(optimization::storage())),
                         Err(mpsc::RecvTimeoutError::Disconnected) => break,
                     }
                 }
@@ -599,6 +623,11 @@ impl App {
             startup_filter: StartupFilter::All,
             busy: false,
             startup_busy: page == Page::Startup,
+            power_target: None,
+            power: None,
+            power_busy: false,
+            storage: None,
+            storage_busy: false,
             notice: error.map(|e| (e, true)),
             failures: Vec::new(),
             details: None,
@@ -668,6 +697,14 @@ impl App {
                         Err(e) => (e, true),
                     });
                 }
+                Event::Power(result) => {
+                    self.power_busy = false;
+                    self.power = Some(result);
+                }
+                Event::Storage(result) => {
+                    self.storage_busy = false;
+                    self.storage = Some(result);
+                }
             }
         }
     }
@@ -680,12 +717,39 @@ impl App {
             ));
             self.busy = false;
             self.startup_busy = false;
+            self.power_busy = false;
+            self.storage_busy = false;
         }
     }
 
     fn settings(&mut self) {
-        if let Err(e) = open_startup_settings() {
-            self.notice = Some((e, true));
+        self.open_settings(
+            "ms-settings:startupapps",
+            "설정 > 앱 > 시작 프로그램을 열어 주세요.",
+        );
+    }
+
+    fn open_settings(&mut self, uri: &str, fallback: &str) {
+        if !open_windows_settings(uri) {
+            self.failures.clear();
+            self.notice = Some((format!("Windows 설정을 열지 못했습니다. {fallback}"), true));
+        }
+    }
+
+    fn navigate(&mut self, page: Page) {
+        self.page = page;
+        self.search.clear();
+        self.details = None;
+        match page {
+            Page::Startup if !self.startup_loaded && !self.startup_busy => {
+                self.startup_busy = true;
+                self.send(Command::Startup);
+            }
+            Page::Optimization if self.storage.is_none() && !self.storage_busy => {
+                self.storage_busy = true;
+                self.send(Command::Storage);
+            }
+            _ => {}
         }
     }
 
@@ -993,13 +1057,15 @@ impl App {
                 ui.add_space(3.0);
                 ui.horizontal(|ui| {
                     if ui.add(egui::Button::new("전체 프로세스").frame(false)).clicked() {
-                        self.page = Page::Memory; self.search.clear();
+                        self.navigate(Page::Memory);
                         self.process_sort = self.widget_sort; self.set_widget(ctx,false);
                     }
                     ui.with_layout(Layout::right_to_left(Align::Center),|ui| {
                         if ui.add(egui::Button::new("시작 프로그램").frame(false)).clicked() {
-                            self.page = Page::Startup; self.search.clear(); self.set_widget(ctx,false);
-                            if !self.startup_loaded && !self.startup_busy { self.startup_busy = true; self.send(Command::Startup); }
+                            self.navigate(Page::Startup); self.set_widget(ctx,false);
+                        }
+                        if ui.add(egui::Button::new("최적화").frame(false)).clicked() {
+                            self.navigate(Page::Optimization); self.set_widget(ctx,false);
                         }
                     });
                 });
@@ -1136,27 +1202,22 @@ impl App {
                     ui.label(RichText::new("memori").size(22.0).strong());
                 });
                 ui.add_space(42.0);
-                for (page, label) in [(Page::Memory, "메모리"), (Page::Startup, "시작 프로그램")]
-                {
+                for page in [Page::Memory, Page::Startup, Page::Optimization] {
                     let selected = self.page == page;
                     let response = ui.add_sized(
                         [ui.available_width(), 42.0],
-                        egui::Button::new(RichText::new(label).size(14.0).color(if selected {
-                            ACCENT
-                        } else {
-                            MUTED
-                        }))
+                        egui::Button::new(
+                            RichText::new(page.title()).size(14.0).color(if selected {
+                                ACCENT
+                            } else {
+                                MUTED
+                            }),
+                        )
                         .fill(if selected { PANEL } else { NAV })
                         .stroke(Stroke::NONE),
                     );
                     if response.clicked() {
-                        self.page = page;
-                        self.search.clear();
-                        self.details = None;
-                        if page == Page::Startup && !self.startup_loaded && !self.startup_busy {
-                            self.startup_busy = true;
-                            self.send(Command::Startup);
-                        }
+                        self.navigate(page);
                     }
                     ui.add_space(4.0);
                 }
@@ -1184,6 +1245,216 @@ impl App {
                     }
                 });
             });
+    }
+
+    fn optimization(&mut self, ui: &mut egui::Ui) {
+        egui::ScrollArea::vertical()
+            .id_salt("optimization")
+            .show(ui, |ui| {
+                self.power_controls(ui);
+                ui.add_space(16.0);
+                ui.separator();
+                ui.add_space(8.0);
+                self.storage_controls(ui);
+            });
+    }
+
+    fn power_controls(&mut self, ui: &mut egui::Ui) {
+        ui.horizontal_wrapped(|ui| {
+            ui.label(RichText::new("앱별 전력 관리").size(19.0).strong());
+            ui.label(
+                RichText::new("절전 우선으로 백그라운드 작업의 전력 사용을 줄일 수 있습니다.")
+                    .small()
+                    .color(MUTED),
+            );
+        });
+        ui.add_space(6.0);
+        ui.add(
+            egui::TextEdit::singleline(&mut self.search)
+                .hint_text("앱 이름 또는 PID 검색")
+                .desired_width(235.0)
+                .margin(Vec2::splat(7.0)),
+        );
+        let query = self.search.to_lowercase();
+        let mut rows: Vec<_> = self
+            .snapshot
+            .iter()
+            .flat_map(|s| &s.processes)
+            .filter(|p| {
+                p.name.to_lowercase().contains(&query) || p.pid.to_string().contains(&query)
+            })
+            .collect();
+        ProcessSort {
+            column: Column::Cpu,
+            descending: true,
+        }
+        .sort(&mut rows);
+        let mut picked = None;
+        let row_height = (ui.text_style_height(&egui::TextStyle::Button)
+            + 2.0 * ui.spacing().button_padding.y)
+            .max(29.0);
+        egui::ScrollArea::vertical()
+            .id_salt("power-apps")
+            .max_height(124.0)
+            .auto_shrink([false, true])
+            .show_rows(ui, row_height, rows.len(), |ui, range| {
+                for process in &rows[range] {
+                    let id = (process.pid, process.created);
+                    let label = format!(
+                        "{}   ·   PID {}   ·   CPU {}",
+                        process.name,
+                        process.pid,
+                        cpu_usage(process.cpu_percent)
+                    );
+                    ui.push_id(id, |ui| {
+                        if ui
+                            .add_enabled(
+                                !self.power_busy && !self.busy,
+                                egui::Button::selectable(self.power_target == Some(id), label)
+                                    .min_size(Vec2::new(ui.available_width(), row_height))
+                                    .truncate(),
+                            )
+                            .on_hover_text(&process.path)
+                            .clicked()
+                        {
+                            picked = Some((*process).clone());
+                        }
+                    });
+                }
+                if rows.is_empty() {
+                    ui.label(
+                        RichText::new(if self.snapshot.is_some() {
+                            "일치하는 앱이 없습니다."
+                        } else {
+                            "프로세스 목록을 읽고 있습니다…"
+                        })
+                        .color(MUTED),
+                    );
+                }
+            });
+        if let Some(process) = picked {
+            self.power_target = Some((process.pid, process.created));
+            self.power = None;
+            self.power_busy = true;
+            self.send(Command::ReadPower(process));
+        }
+        let target = self.snapshot.as_ref().and_then(|s| {
+            s.processes
+                .iter()
+                .find(|p| Some((p.pid, p.created)) == self.power_target)
+        });
+        let mut power_command = None;
+        if let Some(process) = target {
+            ui.horizontal_wrapped(|ui| {
+                ui.label(RichText::new(format!("{} · {}", process.name, process.pid)).strong());
+                if self.power_busy {
+                    ui.label(RichText::new("전력 정책을 확인하고 있습니다…").color(MUTED));
+                } else if let Some(Ok(policy)) = self.power.as_ref() {
+                    let state = match policy {
+                        PowerPolicy::Automatic => "Windows 자동 관리",
+                        PowerPolicy::Eco => "절전 우선 적용 중",
+                        PowerPolicy::Performance => "절전 제한 해제 상태",
+                    };
+                    ui.label(RichText::new(state).color(if *policy == PowerPolicy::Eco {
+                        ACCENT
+                    } else {
+                        MUTED
+                    }));
+                    for (desired, label) in [
+                        (PowerPolicy::Eco, "절전 우선 적용"),
+                        (PowerPolicy::Automatic, "Windows 자동 관리로 전환"),
+                    ] {
+                        if ui
+                            .add_enabled(!self.busy && *policy != desired, egui::Button::new(label))
+                            .clicked()
+                        {
+                            power_command =
+                                Some(Command::SetPower(process.clone(), *policy, desired));
+                        }
+                    }
+                } else if let Some(Err(error)) = self.power.as_ref() {
+                    ui.label(RichText::new(error).color(WARN));
+                } else {
+                    ui.label(RichText::new("상태를 읽으려면 앱을 다시 선택하세요.").color(MUTED));
+                }
+            });
+        } else {
+            ui.label(
+                RichText::new(if self.power_target.is_some() {
+                    "선택한 앱이 종료되었습니다. 다른 앱을 선택하세요."
+                } else {
+                    "전력 정책을 확인할 앱을 선택하세요."
+                })
+                .color(MUTED),
+            );
+        }
+        if let Some(command) = power_command {
+            self.power_busy = true;
+            self.send(command);
+        }
+        ui.label(
+            RichText::new(
+                "앱 실행 중에 적용됩니다. 속도가 중요한 작업은 Windows 자동 관리를 사용하세요.",
+            )
+            .small()
+            .color(MUTED),
+        );
+    }
+
+    fn storage_controls(&mut self, ui: &mut egui::Ui) {
+        ui.horizontal_wrapped(|ui| {
+            ui.label(RichText::new("저장소 여유 공간").size(19.0).strong());
+            if button(ui, "Windows 저장소 열기").clicked() {
+                self.open_settings(
+                    "ms-settings:storagesense",
+                    "설정 > 시스템 > 저장소를 열어 주세요.",
+                );
+            }
+        });
+        match self.storage.as_ref() {
+            Some(Ok(drives)) if drives.is_empty() => {
+                ui.label(RichText::new("조회할 고정 드라이브가 없습니다.").color(MUTED));
+            }
+            Some(Ok(drives)) => {
+                for drive in drives {
+                    ui.horizontal(|ui| {
+                        ui.label(RichText::new(format!("{}:", drive.letter)).strong());
+                        if let Some(space) = &drive.space {
+                            let free = space.available as f32 / space.total as f32;
+                            ui.add(
+                                egui::ProgressBar::new(1.0 - free)
+                                    .desired_width(124.0)
+                                    .fill(if free < 0.1 { WARN } else { ACCENT }),
+                            )
+                            .on_hover_text(format!("{:.0}% 사용 중", (1.0 - free) * 100.0));
+                            ui.label(format!(
+                                "{} 여유 / {}",
+                                bytes(space.available),
+                                bytes(space.total)
+                            ));
+                            if free < 0.1 {
+                                ui.label(RichText::new("여유 10% 미만").small().color(WARN));
+                            }
+                        } else {
+                            ui.label(RichText::new("용량 조회 불가").color(WARN));
+                        }
+                    });
+                }
+            }
+            Some(Err(error)) => {
+                ui.label(RichText::new(error).color(WARN));
+            }
+            None => {
+                ui.label(
+                    RichText::new(if self.storage_busy {
+                        "드라이브를 확인하고 있습니다…"
+                    } else {
+                        "새로 고침으로 드라이브를 확인하세요."
+                    })
+                    .color(MUTED),
+                );
+            }
+        }
     }
 
     fn notice(&mut self, ui: &mut egui::Ui) {
@@ -1921,38 +2192,51 @@ impl eframe::App for App {
             )
             .show(ctx, |ui| {
                 ui.horizontal(|ui| {
-                    ui.label(
-                        RichText::new(if self.page == Page::Memory {
-                            "메모리"
-                        } else {
-                            "시작 프로그램"
-                        })
-                        .size(27.0)
-                        .strong(),
-                    );
+                    ui.label(RichText::new(self.page.title()).size(27.0).strong());
                     ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
                         if ui
                             .add_enabled(
-                                !self.busy && !self.startup_busy,
+                                !self.busy
+                                    && !self.startup_busy
+                                    && !self.power_busy
+                                    && !self.storage_busy,
                                 egui::Button::new("새로 고침").min_size(Vec2::new(85.0, 32.0)),
                             )
                             .clicked()
                         {
-                            if self.page == Page::Memory {
-                                self.send(Command::Refresh);
-                            } else {
-                                self.startup_busy = true;
-                                self.send(Command::Startup);
+                            match self.page {
+                                Page::Memory => self.send(Command::Refresh),
+                                Page::Startup => {
+                                    self.startup_busy = true;
+                                    self.send(Command::Startup);
+                                }
+                                Page::Optimization => {
+                                    self.storage_busy = true;
+                                    self.send(Command::Storage);
+                                    if let Some(process) = self
+                                        .snapshot
+                                        .as_ref()
+                                        .and_then(|s| {
+                                            s.processes.iter().find(|p| {
+                                                Some((p.pid, p.created)) == self.power_target
+                                            })
+                                        })
+                                        .cloned()
+                                    {
+                                        self.power_busy = true;
+                                        self.send(Command::ReadPower(process));
+                                    }
+                                }
                             }
                         }
                     });
                 });
                 ui.add_space(19.0);
                 self.notice(ui);
-                if self.page == Page::Memory {
-                    self.memory(ui);
-                } else {
-                    self.startup(ui);
+                match self.page {
+                    Page::Memory => self.memory(ui),
+                    Page::Startup => self.startup(ui),
+                    Page::Optimization => self.optimization(ui),
                 }
             });
         self.capture(ctx);

@@ -344,24 +344,21 @@ fn snapshot() -> Result<Snapshot, String> {
     Sampler::default().sample()
 }
 
-fn trim_one(process: &Process) -> Result<u64, String> {
+pub(crate) fn checked_process(
+    process: &Process,
+    access: u32,
+    protect_foreground: bool,
+) -> Result<Handle, String> {
+    let foreground = if protect_foreground {
+        protected_foreground_pid()
+    } else {
+        0
+    };
+    if let Some(reason) = blocked_reason(process.pid, &process.name, &process.path, foreground) {
+        return Err(reason.into());
+    }
     unsafe {
-        if !process.eligible {
-            return Err("정리 대상이 아닌 프로세스입니다".into());
-        }
-        if let Some(reason) = blocked_reason(
-            process.pid,
-            &process.name,
-            &process.path,
-            protected_foreground_pid(),
-        ) {
-            return Err(reason.into());
-        }
-        let raw = OpenProcess(
-            PROCESS_QUERY_LIMITED_INFORMATION | PROCESS_SET_QUOTA | PROCESS_VM_READ,
-            0,
-            process.pid,
-        );
+        let raw = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION | access, 0, process.pid);
         if raw.is_null() {
             return Err(error("앱이 종료되었거나 접근할 수 없습니다"));
         }
@@ -380,6 +377,16 @@ fn trim_one(process: &Process) -> Result<u64, String> {
         {
             return Err("현재 세션의 프로세스가 아닙니다".into());
         }
+        Ok(handle)
+    }
+}
+
+fn trim_one(process: &Process) -> Result<u64, String> {
+    if !process.eligible {
+        return Err("정리 대상이 아닌 프로세스입니다".into());
+    }
+    let handle = checked_process(process, PROCESS_SET_QUOTA | PROCESS_VM_READ, true)?;
+    unsafe {
         let before = working_set(handle.0).ok_or("작업 집합을 확인하지 못했습니다")?;
         if before < 16 * 1024 * 1024 {
             return Err("작업 집합이 이미 16 MB 미만입니다".into());
@@ -407,7 +414,7 @@ pub fn trim(processes: &[Process]) -> TrimResult {
 }
 
 #[cfg(test)]
-mod tests {
+pub(crate) mod tests {
     use super::*;
 
     fn cpu_process(pid: u32, created: u64) -> Process {
@@ -534,7 +541,7 @@ mod tests {
     }
 
     #[test]
-    #[ignore = "helper process used only by trim_only_a_disposable_child"]
+    #[ignore = "helper process used only by disposable-process tests"]
     fn trim_child_helper() {
         let mut data = vec![0u8; 64 * 1024 * 1024];
         for i in (0..data.len()).step_by(4096) {
@@ -544,16 +551,16 @@ mod tests {
         std::thread::sleep(std::time::Duration::from_secs(30));
     }
 
-    #[test]
-    fn trim_only_a_disposable_child() {
-        struct Child(std::process::Child);
-        impl Drop for Child {
-            fn drop(&mut self) {
-                let _ = self.0.kill();
-                let _ = self.0.wait();
-            }
+    pub(crate) struct TestProcess(std::process::Child);
+    impl Drop for TestProcess {
+        fn drop(&mut self) {
+            let _ = self.0.kill();
+            let _ = self.0.wait();
         }
-        let child = Child(
+    }
+
+    pub(crate) fn disposable_process() -> (TestProcess, Process) {
+        let child = TestProcess(
             std::process::Command::new(std::env::current_exe().unwrap())
                 .args([
                     "--exact",
@@ -566,21 +573,26 @@ mod tests {
                 .unwrap(),
         );
         let start = std::time::Instant::now();
-        let process = loop {
+        loop {
             if let Some(p) = snapshot()
                 .unwrap()
                 .processes
                 .into_iter()
                 .find(|p| p.pid == child.0.id() && p.bytes > 48 * 1024 * 1024)
             {
-                break p;
+                return (child, p);
             }
             assert!(
                 start.elapsed().as_secs() < 10,
                 "test child failed to allocate its working set"
             );
             std::thread::sleep(std::time::Duration::from_millis(100));
-        };
+        }
+    }
+
+    #[test]
+    fn trim_only_a_disposable_child() {
+        let (_child, process) = disposable_process();
         assert!(process.eligible);
         let mut stale = process.clone();
         stale.created ^= 1;

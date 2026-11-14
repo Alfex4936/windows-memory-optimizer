@@ -19,6 +19,7 @@ The interface is in Korean. The compact widget shows RAM usage, cleanup, and exp
 - Live physical/commit memory and CPU readings, with the top five processes' CPU/RAM in the expanded widget.
 - Sortable name, PID, CPU, working-set, and status columns with process selection.
 - Reversible current-user Run and Startup-folder management, status filters, and command details.
+- Per-process EcoQoS control on Windows 11, fixed-drive capacity, and a link to Windows Storage settings.
 - Optional launch at Windows login, configured from the startup page.
 - Local operation without network requests, telemetry, ads, or a background service.
 

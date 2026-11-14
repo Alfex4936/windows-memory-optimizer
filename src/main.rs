@@ -1,6 +1,7 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
 mod memory;
+mod optimization;
 mod preferences;
 mod sort;
 mod startup;
