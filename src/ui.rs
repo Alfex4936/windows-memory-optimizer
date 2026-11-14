@@ -1,4 +1,5 @@
 use crate::{
+    cleanup::{self, Catalog, Category, CleanupResult, ScanReport},
     memory::{self, Process, Snapshot, TrimResult},
     optimization::{self, Drive, PowerPolicy},
     preferences::{self, Preferences},
@@ -81,6 +82,18 @@ enum Event {
     Storage(Result<Vec<Drive>, String>),
 }
 
+enum CleanupState {
+    Idle,
+    Scanning(Receiver<Result<Catalog, String>>),
+    Preview {
+        catalog: Catalog,
+        report: ScanReport,
+    },
+    Cleaning(Receiver<Result<CleanupResult, String>>),
+    Done(CleanupResult),
+    Error(String),
+}
+
 pub struct App {
     preferences: Preferences,
     saved_preferences: Preferences,
@@ -112,6 +125,9 @@ pub struct App {
     power_busy: bool,
     storage: Option<Result<Vec<Drive>, String>>,
     storage_busy: bool,
+    cleanup: CleanupState,
+    cleanup_selected: HashSet<usize>,
+    confirm_cleanup: bool,
     notice: Option<(String, bool)>,
     failures: Vec<String>,
     details: Option<String>,
@@ -137,6 +153,16 @@ fn bytes(n: u64) -> String {
         format!("{:.1} GB", n as f64 / (1024.0 * 1024.0 * 1024.0))
     } else {
         format!("{:.0} MB", n as f64 / (1024.0 * 1024.0))
+    }
+}
+
+fn disk_bytes(n: u64) -> String {
+    if n < 1024 {
+        format!("{n} B")
+    } else if n < 1024 * 1024 {
+        format!("{:.1} KB", n as f64 / 1024.0)
+    } else {
+        bytes(n)
     }
 }
 
@@ -628,6 +654,9 @@ impl App {
             power_busy: false,
             storage: None,
             storage_busy: false,
+            cleanup: CleanupState::Idle,
+            cleanup_selected: HashSet::new(),
+            confirm_cleanup: false,
             notice: error.map(|e| (e, true)),
             failures: Vec::new(),
             details: None,
@@ -638,6 +667,34 @@ impl App {
     }
 
     fn receive(&mut self) {
+        match &self.cleanup {
+            CleanupState::Scanning(rx) => match rx.try_recv() {
+                Ok(Ok(catalog)) => {
+                    let report = catalog.report();
+                    self.cleanup = CleanupState::Preview { catalog, report };
+                }
+                Ok(Err(error)) => self.cleanup = CleanupState::Error(error),
+                Err(mpsc::TryRecvError::Disconnected) => {
+                    self.cleanup = CleanupState::Error("임시 파일 검사가 중단되었습니다.".into());
+                }
+                Err(mpsc::TryRecvError::Empty) => {}
+            },
+            CleanupState::Cleaning(rx) => match rx.try_recv() {
+                Ok(Ok(result)) => {
+                    self.cleanup = CleanupState::Done(result);
+                    self.storage_busy = true;
+                    self.send(Command::Storage);
+                }
+                Ok(Err(error)) => self.cleanup = CleanupState::Error(error),
+                Err(mpsc::TryRecvError::Disconnected) => {
+                    self.cleanup = CleanupState::Error(
+                        "정리가 중단되었습니다. 다시 검사해 현재 상태를 확인하세요.".into(),
+                    );
+                }
+                Err(mpsc::TryRecvError::Empty) => {}
+            },
+            _ => {}
+        }
         while let Ok(event) = self.rx.try_recv() {
             match event {
                 Event::Memory(Ok(s)) => {
@@ -1251,12 +1308,284 @@ impl App {
         egui::ScrollArea::vertical()
             .id_salt("optimization")
             .show(ui, |ui| {
-                self.power_controls(ui);
+                self.storage_controls(ui);
                 ui.add_space(16.0);
                 ui.separator();
                 ui.add_space(8.0);
-                self.storage_controls(ui);
+                self.cleanup_controls(ui);
+                ui.add_space(16.0);
+                ui.separator();
+                ui.add_space(8.0);
+                self.power_controls(ui);
             });
+    }
+
+    fn scan_cleanup(&mut self, ctx: &egui::Context) {
+        self.cleanup_selected.clear();
+        let (tx, rx) = mpsc::channel();
+        let repaint = ctx.clone();
+        self.cleanup = match std::thread::Builder::new().spawn(move || {
+            let _ = tx.send(cleanup::scan());
+            repaint.request_repaint();
+        }) {
+            Ok(_) => CleanupState::Scanning(rx),
+            Err(error) => CleanupState::Error(format!("검사를 시작하지 못했습니다. {error}")),
+        };
+    }
+
+    fn cleanup_controls(&mut self, ui: &mut egui::Ui) {
+        let busy = matches!(
+            self.cleanup,
+            CleanupState::Scanning(_) | CleanupState::Cleaning(_)
+        );
+        ui.horizontal_wrapped(|ui| {
+            ui.label(RichText::new("임시 파일 정리").size(19.0).strong());
+            if ui
+                .add_enabled(
+                    !busy,
+                    egui::Button::new("임시 파일 검사").min_size(Vec2::new(0.0, 32.0)),
+                )
+                .clicked()
+            {
+                self.scan_cleanup(ui.ctx());
+            }
+        });
+        match &self.cleanup {
+            CleanupState::Idle => {
+                ui.label(RichText::new("현재 계정의 임시 폴더와 DirectX 셰이더 캐시에서 24시간 이상 지난 파일을 검사합니다.").color(MUTED));
+            }
+            CleanupState::Scanning(_) | CleanupState::Cleaning(_) => {
+                ui.horizontal(|ui| {
+                    ui.spinner();
+                    ui.label(if matches!(self.cleanup, CleanupState::Scanning(_)) {
+                        "파일을 확인하고 있습니다…"
+                    } else {
+                        "선택한 파일을 정리하고 있습니다…"
+                    });
+                });
+            }
+            CleanupState::Preview { report, .. } => {
+                let total = report
+                    .items
+                    .iter()
+                    .fold(0u64, |sum, item| sum.saturating_add(item.bytes));
+                ui.label(
+                    RichText::new(format!(
+                        "확보 예상 {} · 파일 {}개",
+                        disk_bytes(total),
+                        report.items.len()
+                    ))
+                    .strong()
+                    .color(ACCENT),
+                );
+                if report.skipped > 0 {
+                    ui.label(
+                        RichText::new(format!("검사에서 건너뜀 {}개", report.skipped))
+                            .small()
+                            .color(MUTED),
+                    );
+                }
+                if report.limited {
+                    ui.label(
+                        RichText::new("검사 한도에 도달해 일부 파일만 표시합니다.")
+                            .small()
+                            .color(WARN),
+                    );
+                }
+                if report.items.is_empty() {
+                    ui.label(RichText::new("정리할 수 있는 파일이 없습니다.").color(MUTED));
+                    return;
+                }
+                for (category, label) in [
+                    (Category::Temp, "사용자 임시 파일"),
+                    (Category::Shader, "DirectX 셰이더 캐시"),
+                ] {
+                    let mut count = 0;
+                    let mut size = 0u64;
+                    let mut checked = 0;
+                    for (index, item) in report
+                        .items
+                        .iter()
+                        .enumerate()
+                        .filter(|(_, item)| item.category == category)
+                    {
+                        count += 1;
+                        size = size.saturating_add(item.bytes);
+                        checked += usize::from(self.cleanup_selected.contains(&index));
+                    }
+                    if count == 0 {
+                        continue;
+                    }
+                    ui.horizontal(|ui| {
+                        let mut all = checked == count;
+                        if ui
+                            .checkbox(&mut all, label)
+                            .on_hover_text("이 분류의 파일을 모두 선택하거나 해제합니다.")
+                            .changed()
+                        {
+                            for (index, _) in report
+                                .items
+                                .iter()
+                                .enumerate()
+                                .filter(|(_, item)| item.category == category)
+                            {
+                                if all {
+                                    self.cleanup_selected.insert(index);
+                                } else {
+                                    self.cleanup_selected.remove(&index);
+                                }
+                            }
+                        }
+                        ui.label(
+                            RichText::new(format!("{checked}/{count}개 · {}", disk_bytes(size)))
+                                .small()
+                                .color(MUTED),
+                        );
+                    });
+                }
+                ui.collapsing("개별 파일 선택", |ui| {
+                    egui::ScrollArea::vertical()
+                        .id_salt("cleanup-files")
+                        .max_height(180.0)
+                        .show_rows(ui, 28.0, report.items.len(), |ui, range| {
+                            for index in range {
+                                let item = &report.items[index];
+                                let folder = match item.category {
+                                    Category::Temp => "임시 파일",
+                                    Category::Shader => "셰이더 캐시",
+                                };
+                                ui.push_id(index, |ui| {
+                                    ui.horizontal(|ui| {
+                                        let mut selected = self.cleanup_selected.contains(&index);
+                                        let response = ui.checkbox(&mut selected, "");
+                                        response.widget_info(|| {
+                                            egui::WidgetInfo::selected(
+                                                egui::WidgetType::Checkbox,
+                                                true,
+                                                selected,
+                                                format!("{folder} {} 선택", item.name),
+                                            )
+                                        });
+                                        if response.changed() {
+                                            if selected {
+                                                self.cleanup_selected.insert(index);
+                                            } else {
+                                                self.cleanup_selected.remove(&index);
+                                            }
+                                        }
+                                        cell(
+                                            ui,
+                                            (ui.available_width() - 106.0).clamp(60.0, 476.0),
+                                            28.0,
+                                            RichText::new(format!("{folder} / {}", item.name)),
+                                            Align::LEFT,
+                                        )
+                                        .on_hover_text(&item.name);
+                                        cell(
+                                            ui,
+                                            96.0,
+                                            28.0,
+                                            RichText::new(disk_bytes(item.bytes)).color(MUTED),
+                                            Align::RIGHT,
+                                        );
+                                    });
+                                });
+                            }
+                        });
+                });
+                let selected = self.cleanup_selected.len();
+                let size = self.cleanup_selected.iter().fold(0u64, |sum, &index| {
+                    sum.saturating_add(report.items[index].bytes)
+                });
+                ui.horizontal_wrapped(|ui| {
+                    if ui
+                        .add_enabled(
+                            selected > 0,
+                            egui::Button::new("선택한 파일 정리").min_size(Vec2::new(0.0, 32.0)),
+                        )
+                        .clicked()
+                    {
+                        self.confirm_cleanup = true;
+                    }
+                    ui.label(
+                        RichText::new(format!(
+                            "선택 {selected}개 · 확보 예상 {}",
+                            disk_bytes(size)
+                        ))
+                        .color(MUTED),
+                    );
+                });
+            }
+            CleanupState::Done(result) => {
+                ui.label(
+                    RichText::new(format!(
+                        "삭제 {}개 · 확보 추정 {} · 건너뜀 {}개",
+                        result.removed,
+                        disk_bytes(result.bytes),
+                        result.skipped
+                    ))
+                    .color(ACCENT),
+                );
+            }
+            CleanupState::Error(error) => {
+                ui.label(RichText::new(error).color(WARN));
+            }
+        }
+    }
+
+    fn cleanup_confirmation(&mut self, ctx: &egui::Context) {
+        if !self.confirm_cleanup {
+            return;
+        }
+        let CleanupState::Preview { report, .. } = &self.cleanup else {
+            self.confirm_cleanup = false;
+            return;
+        };
+        let selected = self.cleanup_selected.len();
+        let size = self.cleanup_selected.iter().fold(0u64, |sum, &index| {
+            sum.saturating_add(report.items[index].bytes)
+        });
+        let dialog = egui::Modal::new(egui::Id::new("confirm-cleanup")).show(ctx, |ui| {
+            ui.set_max_width(370.0);
+            ui.heading("선택한 임시 파일 정리");
+            ui.label(format!(
+                "파일 {selected}개 · 확보 예상 {}",
+                disk_bytes(size)
+            ));
+            ui.label("선택한 파일은 영구 삭제됩니다. 셰이더 캐시는 필요할 때 다시 생성됩니다.");
+            ui.horizontal(|ui| {
+                (
+                    button(ui, "취소").clicked(),
+                    ui.add_enabled(
+                        selected > 0,
+                        egui::Button::new("영구 삭제").min_size(Vec2::new(0.0, 32.0)),
+                    )
+                    .clicked(),
+                )
+            })
+            .inner
+        });
+        if dialog.inner.0 || dialog.should_close() {
+            self.confirm_cleanup = false;
+        }
+        if dialog.inner.1 {
+            self.confirm_cleanup = false;
+            let CleanupState::Preview { catalog, .. } =
+                std::mem::replace(&mut self.cleanup, CleanupState::Idle)
+            else {
+                return;
+            };
+            let indices: Vec<_> = self.cleanup_selected.drain().collect();
+            let (tx, rx) = mpsc::channel();
+            let repaint = ctx.clone();
+            self.cleanup = match std::thread::Builder::new().spawn(move || {
+                let _ = tx.send(catalog.clean(&indices));
+                repaint.request_repaint();
+            }) {
+                Ok(_) => CleanupState::Cleaning(rx),
+                Err(error) => CleanupState::Error(format!("정리를 시작하지 못했습니다. {error}")),
+            };
+        }
     }
 
     fn power_controls(&mut self, ui: &mut egui::Ui) {
@@ -2240,6 +2569,7 @@ impl eframe::App for App {
                 }
             });
         self.capture(ctx);
+        self.cleanup_confirmation(ctx);
         // Slow repaint keeps idle CPU low while allowing relative timestamps to advance.
         ctx.request_repaint_after(Duration::from_secs(1));
     }

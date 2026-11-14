@@ -309,7 +309,7 @@ fn scan_registry(user: bool, view: u32, out: &mut Vec<StartupEntry>) -> Result<(
     Ok(())
 }
 
-fn known_folder(id: &GUID) -> Result<PathBuf, String> {
+pub(crate) fn known_folder(id: &GUID) -> Result<PathBuf, String> {
     let mut pointer = std::ptr::null_mut();
     // KF_FLAG_DONT_VERIFY: scanning a missing folder must not create it.
     let result = unsafe { SHGetKnownFolderPath(id, 0x4000, std::ptr::null_mut(), &mut pointer) };

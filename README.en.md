@@ -20,6 +20,7 @@ The interface is in Korean. The compact widget shows RAM usage, cleanup, and exp
 - Sortable name, PID, CPU, working-set, and status columns with process selection.
 - Reversible current-user Run and Startup-folder management, status filters, and command details.
 - Per-process EcoQoS control on Windows 11, fixed-drive capacity, and a link to Windows Storage settings.
+- Preview allocated space for temporary files and DirectX shader cache, then clean selected categories or files.
 - Optional launch at Windows login, configured from the startup page.
 - Local operation without network requests, telemetry, ads, or a background service.
 
