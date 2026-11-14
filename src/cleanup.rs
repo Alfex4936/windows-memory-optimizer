@@ -1,5 +1,6 @@
 use crate::{memory::Handle, startup};
 use std::{
+    collections::HashSet,
     io,
     mem::{offset_of, size_of},
     os::windows::ffi::OsStrExt,
@@ -37,9 +38,6 @@ use windows_sys::{
     },
 };
 
-const MAX_ENTRIES: usize = 20_000;
-const MAX_ITEMS: usize = 5_000;
-const MAX_DEPTH: usize = 16;
 const DIRECTORY_ACCESS: u32 = FILE_LIST_DIRECTORY | FILE_READ_ATTRIBUTES;
 const DIRECTORY_SHARE: u32 = FILE_SHARE_READ | FILE_SHARE_WRITE;
 const UNAVAILABLE: u32 = FILE_ATTRIBUTE_REPARSE_POINT
@@ -79,7 +77,14 @@ pub struct Item {
 pub struct ScanReport {
     pub items: Vec<Item>,
     pub skipped: usize,
-    pub limited: bool,
+    pub unreadable: usize,
+}
+
+#[derive(Clone, Copy, Debug, Default)]
+pub struct ScanProgress {
+    pub visited: usize,
+    pub candidates: usize,
+    pub bytes: u64,
 }
 
 pub struct CleanupResult {
@@ -93,7 +98,7 @@ pub struct Catalog {
     roots: Vec<(Category, Identity)>,
     entries: Vec<Entry>,
     skipped: usize,
-    limited: bool,
+    unreadable: usize,
 }
 
 struct Entry {
@@ -103,7 +108,7 @@ struct Entry {
     metadata: Metadata,
 }
 
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
 struct Identity {
     volume: u64,
     file: [u8; 16],
@@ -390,73 +395,114 @@ fn directory_entry(buf: &[u8]) -> Option<DirectoryEntry> {
     })
 }
 
-struct Scan<'a> {
-    catalog: &'a mut Catalog,
-    root: usize,
-    cutoff: i64,
-    seen: usize,
-    added: usize,
+struct Directory {
+    handle: Handle,
+    // Windows requires an aligned buffer. Each open directory keeps its own unread batch.
+    buffer: Vec<u64>,
+    next_offset: Option<usize>,
 }
 
-impl Scan<'_> {
-    fn walk(&mut self, dir: HANDLE, path: &mut Vec<Name>) {
-        // The API requires an 8-byte-aligned buffer. Parse only bounded slices.
-        let mut buffer = vec![0u64; 1024];
-        loop {
-            let size = size_of::<u64>() * buffer.len();
-            let ptr = buffer.as_mut_ptr().cast();
-            if unsafe { GetFileInformationByHandleEx(dir, FileFullDirectoryInfo, ptr, size as u32) }
-                == 0
-            {
-                if io::Error::last_os_error().raw_os_error() != Some(ERROR_NO_MORE_FILES as i32) {
-                    self.catalog.skipped += 1;
-                }
-                return;
-            }
-            let mut bytes = unsafe { std::slice::from_raw_parts(ptr.cast::<u8>(), size) };
-            loop {
-                let Some(entry) = directory_entry(bytes) else {
-                    self.catalog.skipped += 1;
-                    return;
-                };
-                if self.seen >= MAX_ENTRIES || self.added >= MAX_ITEMS {
-                    self.catalog.limited = true;
-                    return;
-                }
-                self.seen += 1;
-                self.visit(dir, path, &entry);
-                if entry.next == 0 {
-                    break;
-                }
-                bytes = &bytes[entry.next..];
-            }
+impl Directory {
+    fn new(handle: Handle) -> Self {
+        Self {
+            handle,
+            buffer: vec![0; 1024],
+            next_offset: None,
         }
     }
 
-    fn visit(&mut self, dir: HANDLE, path: &mut Vec<Name>, entry: &DirectoryEntry) {
-        if entry.name == [46] || entry.name == [46, 46] {
-            return;
-        }
-        if !valid_name(&entry.name) || entry.attributes & UNAVAILABLE != 0 {
-            self.catalog.skipped += 1;
-            return;
-        }
-        if entry.attributes & FILE_ATTRIBUTE_DIRECTORY != 0 {
-            if path.len() >= MAX_DEPTH {
-                self.catalog.limited = true;
-                self.catalog.skipped += 1;
-                return;
-            }
-            match open_child(dir, &entry.name, true, false) {
-                Ok(child) => {
-                    path.push(entry.name.clone());
-                    self.walk(child.0, path);
-                    path.pop();
+    fn next(&mut self) -> io::Result<Option<DirectoryEntry>> {
+        let size = size_of::<u64>() * self.buffer.len();
+        let ptr = self.buffer.as_mut_ptr().cast();
+        let offset = if let Some(offset) = self.next_offset {
+            offset
+        } else {
+            let success = unsafe {
+                GetFileInformationByHandleEx(self.handle.0, FileFullDirectoryInfo, ptr, size as u32)
+            };
+            if success == 0 {
+                let error = io::Error::last_os_error();
+                if error.raw_os_error() == Some(ERROR_NO_MORE_FILES as i32) {
+                    return Ok(None);
                 }
-                Err(_) => self.catalog.skipped += 1,
+                return Err(error);
             }
-            return;
+            0
+        };
+        let bytes = unsafe { std::slice::from_raw_parts(ptr.cast::<u8>(), size) };
+        let entry = bytes
+            .get(offset..)
+            .and_then(directory_entry)
+            .ok_or_else(invalid_path)?;
+        // A zero offset marks the batch end. Windows resumes from this handle's cursor.
+        self.next_offset = (entry.next != 0).then_some(offset + entry.next);
+        Ok(Some(entry))
+    }
+}
+
+struct Scan<'a, F> {
+    catalog: &'a mut Catalog,
+    cutoff: i64,
+    identities: HashSet<Identity>,
+    totals: ScanProgress,
+    progress: F,
+}
+
+impl<F: FnMut(ScanProgress) -> bool> Scan<'_, F> {
+    fn walk(&mut self, root: usize, directory: Handle) -> bool {
+        let mut stack = vec![Directory::new(directory)];
+        let mut path = Vec::new();
+        while let Some(current) = stack.last_mut() {
+            let dir = current.handle.0;
+            let entry = match current.next() {
+                Ok(Some(entry)) => entry,
+                state => {
+                    if state.is_err() {
+                        self.catalog.unreadable += 1;
+                    }
+                    stack.pop();
+                    path.pop();
+                    continue;
+                }
+            };
+            if entry.name == [46] || entry.name == [46, 46] {
+                continue;
+            }
+            self.totals.visited += 1;
+            let is_directory = entry.attributes & FILE_ATTRIBUTE_DIRECTORY != 0;
+            if !valid_name(&entry.name) || entry.attributes & UNAVAILABLE != 0 {
+                let unreadable =
+                    is_directory && entry.attributes & FILE_ATTRIBUTE_REPARSE_POINT == 0;
+                if unreadable {
+                    self.catalog.unreadable += 1;
+                } else {
+                    self.catalog.skipped += 1;
+                }
+            } else if is_directory {
+                match open_child(dir, &entry.name, true, false) {
+                    Ok(child) => {
+                        path.push(entry.name);
+                        stack.push(Directory::new(child));
+                    }
+                    Err(_) => self.catalog.unreadable += 1,
+                }
+            } else {
+                self.visit_file(root, dir, &mut path, entry);
+            }
+            if !(self.progress)(self.totals) {
+                return false;
+            }
         }
+        true
+    }
+
+    fn visit_file(
+        &mut self,
+        root: usize,
+        dir: HANDLE,
+        path: &mut Vec<Name>,
+        entry: DirectoryEntry,
+    ) {
         if entry.attributes & EXCLUDED_FILE != 0 || !old_enough(self.cutoff, entry.times) {
             self.catalog.skipped += 1;
             return;
@@ -467,35 +513,40 @@ impl Scan<'_> {
             self.catalog.skipped += 1;
             return;
         };
-        path.push(entry.name.clone());
+        // A file renamed during enumeration can appear twice.
+        if !self.identities.insert(metadata.identity) {
+            return;
+        }
+        self.totals.candidates += 1;
+        self.totals.bytes = self.totals.bytes.saturating_add(metadata.allocation);
+        path.push(entry.name);
         let name = path
             .iter()
             .map(|part| String::from_utf16_lossy(part).replace(char::is_control, "\u{fffd}"))
             .collect::<Vec<_>>()
             .join("\\");
         self.catalog.entries.push(Entry {
-            root: self.root,
+            root,
             path: path.clone(),
             item: Item {
                 name,
-                category: self.catalog.roots[self.root].0,
+                category: self.catalog.roots[root].0,
                 bytes: metadata.allocation,
             },
             metadata,
         });
-        self.added += 1;
         path.pop();
     }
 }
 
-pub fn scan() -> Result<Catalog, String> {
+pub fn scan(progress: impl FnMut(ScanProgress) -> bool) -> Result<Option<Catalog>, String> {
     let local = startup::known_folder(&FOLDERID_LocalAppData)
         .map_err(|_| "현재 계정의 로컬 앱 데이터 폴더를 읽지 못했습니다")?;
     let profile =
         startup::known_folder(&FOLDERID_Profile).map_err(|_| "현재 계정 폴더를 읽지 못했습니다")?;
     let location = profile_location(&profile, &local)
         .map_err(|error| format!("정리 경로를 확인하지 못했습니다: {error}"))?;
-    scan_location(location, age_cutoff()?)
+    scan_location(location, age_cutoff()?, progress)
 }
 
 fn profile_location(profile: &Path, local: &Path) -> io::Result<Location> {
@@ -510,7 +561,15 @@ fn profile_location(profile: &Path, local: &Path) -> io::Result<Location> {
     Location::new(local)
 }
 
-fn scan_location(location: Location, cutoff: i64) -> Result<Catalog, String> {
+fn scan_location(
+    location: Location,
+    cutoff: i64,
+    mut progress: impl FnMut(ScanProgress) -> bool,
+) -> Result<Option<Catalog>, String> {
+    let totals = ScanProgress::default();
+    if !progress(totals) {
+        return Ok(None);
+    }
     let parents = location
         .open()
         .map_err(|error| format!("정리 폴더를 열지 못했습니다: {error}"))?;
@@ -520,33 +579,39 @@ fn scan_location(location: Location, cutoff: i64) -> Result<Catalog, String> {
         roots: Vec::new(),
         entries: Vec::new(),
         skipped: 0,
-        limited: false,
+        unreadable: 0,
     };
-    for category in [Category::Temp, Category::Shader] {
-        let directory = match open_child(parent, &category.folder(), true, true) {
-            Ok(directory) => directory,
-            Err(error) => {
-                if error.kind() != io::ErrorKind::NotFound {
-                    catalog.skipped += 1;
-                }
-                continue;
-            }
-        };
-        let Ok(root_id) = identity(directory.0) else {
-            catalog.skipped += 1;
-            continue;
-        };
-        let root = catalog.roots.len();
-        catalog.roots.push((category, root_id));
+    let totals = {
         let mut scanner = Scan {
             catalog: &mut catalog,
-            root,
             cutoff,
-            seen: 0,
-            added: 0,
+            identities: HashSet::new(),
+            totals,
+            progress: &mut progress,
         };
-        scanner.walk(directory.0, &mut Vec::new());
-    }
+        for category in [Category::Temp, Category::Shader] {
+            let directory = match open_child(parent, &category.folder(), true, true) {
+                Ok(directory) => directory,
+                Err(error) => {
+                    if error.kind() != io::ErrorKind::NotFound {
+                        scanner.catalog.unreadable += 1;
+                    }
+                    continue;
+                }
+            };
+            let Ok(root_id) = identity(directory.0) else {
+                scanner.catalog.unreadable += 1;
+                continue;
+            };
+            let root = scanner.catalog.roots.len();
+            scanner.catalog.roots.push((category, root_id));
+            if !scanner.walk(root, directory) {
+                return Ok(None);
+            }
+        }
+        scanner.totals
+    };
+    drop(parents);
     catalog.entries.sort_unstable_by(|a, b| {
         b.item
             .bytes
@@ -555,7 +620,7 @@ fn scan_location(location: Location, cutoff: i64) -> Result<Catalog, String> {
             .then_with(|| a.item.category.cmp(&b.item.category))
             .then_with(|| a.path.cmp(&b.path))
     });
-    Ok(catalog)
+    Ok(progress(totals).then_some(catalog))
 }
 
 impl Catalog {
@@ -567,7 +632,7 @@ impl Catalog {
                 .map(|entry| entry.item.clone())
                 .collect(),
             skipped: self.skipped,
-            limited: self.limited,
+            unreadable: self.unreadable,
         }
     }
 
@@ -684,7 +749,9 @@ mod tests {
         }
 
         fn scan(&self) -> Catalog {
-            scan_location(Location::new(&self.0).unwrap(), i64::MAX).unwrap()
+            scan_location(Location::new(&self.0).unwrap(), i64::MAX, |_| true)
+                .unwrap()
+                .unwrap()
         }
     }
 
@@ -706,7 +773,8 @@ mod tests {
         fs::hard_link(&shared, fixture.0.join("shared-outside")).unwrap();
         let cutoff = age_cutoff().unwrap();
         assert!(
-            scan_location(Location::new(&fixture.0).unwrap(), cutoff)
+            scan_location(Location::new(&fixture.0).unwrap(), cutoff, |_| true)
+                .unwrap()
                 .unwrap()
                 .report()
                 .items
@@ -729,6 +797,69 @@ mod tests {
         assert_eq!(result.skipped, 0);
         assert!(!selected.exists());
         assert!(untouched.is_file() && empty.is_file() && shared.is_file() && nested.is_dir());
+    }
+
+    #[test]
+    fn scan_continues_across_batches_and_deeper_than_sixteen_directories() {
+        let fixture = Fixture::new();
+        for i in 0..5_001 {
+            fixture.file(&format!(r"Temp\item-{i:04}.tmp"), 8192);
+        }
+        for i in 0..15_000 {
+            fs::File::create(fixture.0.join(format!(r"Temp\empty-{i:05}"))).unwrap();
+        }
+        let deep_relative = format!(r"Temp\{}deep.tmp", r"dir\".repeat(20));
+        fs::create_dir_all(fixture.0.join(&deep_relative).parent().unwrap()).unwrap();
+        let deep = fixture.file(&deep_relative, 8192);
+        let shader = fixture.file(r"D3DSCache\shader.bin", 8192);
+
+        let mut progress = ScanProgress::default();
+        let catalog = scan_location(Location::new(&fixture.0).unwrap(), i64::MAX, |snapshot| {
+            assert!(snapshot.visited >= progress.visited);
+            assert!(snapshot.candidates >= progress.candidates);
+            assert!(snapshot.bytes >= progress.bytes);
+            progress = snapshot;
+            true
+        })
+        .unwrap()
+        .unwrap();
+        let report = catalog.report();
+        assert_eq!(report.unreadable, 0);
+        assert_eq!(report.items.len(), 5_003);
+        assert_eq!(report.items.len(), progress.candidates);
+        assert_eq!(
+            report.items.iter().map(|item| item.bytes).sum::<u64>(),
+            progress.bytes
+        );
+        assert_eq!(progress.visited, report.items.len() + 15_020);
+        assert_eq!(report.skipped, 15_000);
+        let index = report
+            .items
+            .iter()
+            .position(|item| item.name.ends_with(r"\deep.tmp"))
+            .unwrap();
+        let result = catalog.clean_before(&[index], i64::MAX).unwrap();
+        assert_eq!(result.removed, 1);
+        assert!(!deep.exists() && shader.is_file());
+        assert!(fixture.0.join(r"Temp\item-5000.tmp").is_file());
+    }
+
+    #[test]
+    fn canceled_scan_discards_accumulated_candidates() {
+        let fixture = Fixture::new();
+        let first = fixture.file(r"Temp\first.tmp", 8192);
+        let last = fixture.file(r"Temp\last.tmp", 8192);
+        let mut observed = None;
+        let catalog = scan_location(Location::new(&fixture.0).unwrap(), i64::MAX, |snapshot| {
+            observed = Some(snapshot);
+            snapshot.candidates == 0
+        })
+        .unwrap();
+        assert!(catalog.is_none());
+        let observed = observed.unwrap();
+        assert_eq!((observed.visited, observed.candidates), (1, 1));
+        assert!(observed.bytes > 0);
+        assert!(first.is_file() && last.is_file());
     }
 
     #[test]

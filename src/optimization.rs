@@ -1,5 +1,9 @@
 use crate::memory::{self, Process};
-use std::{io, mem::size_of, ptr::null_mut};
+use std::{
+    io,
+    mem::size_of,
+    ptr::{null, null_mut},
+};
 use windows_sys::Win32::{
     Foundation::HANDLE,
     Storage::FileSystem::{GetDiskFreeSpaceExW, GetDriveTypeW, GetLogicalDrives},
@@ -11,6 +15,7 @@ use windows_sys::Win32::{
         },
         WindowsProgramming::DRIVE_FIXED,
     },
+    UI::Shell::{SHQUERYRBINFO, SHQueryRecycleBinW},
 };
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -120,6 +125,24 @@ pub struct Drive {
 pub struct DriveSpace {
     pub available: u64,
     pub total: u64,
+}
+
+pub fn recycle_bin_usage() -> Result<(u64, u64), String> {
+    let mut info = SHQUERYRBINFO {
+        cbSize: size_of::<SHQUERYRBINFO>() as u32,
+        ..Default::default()
+    };
+    let result = unsafe { SHQueryRecycleBinW(null(), &mut info) };
+    if result != 0 {
+        return Err(format!(
+            "휴지통 용량을 읽지 못했습니다 (0x{:08X}).",
+            result as u32
+        ));
+    }
+    match (u64::try_from(info.i64NumItems), u64::try_from(info.i64Size)) {
+        (Ok(count), Ok(bytes)) => Ok((count, bytes)),
+        _ => Err("Windows가 휴지통 용량을 반환하지 않았습니다.".into()),
+    }
 }
 
 pub fn storage() -> Result<Vec<Drive>, String> {
