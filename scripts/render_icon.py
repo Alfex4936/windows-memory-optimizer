@@ -4,6 +4,10 @@ from pathlib import Path
 from PIL import Image, ImageDraw, PngImagePlugin
 
 
+BACKGROUND = "#d2f780"
+FOREGROUND = "#0d0f14"
+
+
 def main():
     assets = Path(__file__).resolve().parent.parent / "assets"
     assets.mkdir(exist_ok=True)
@@ -12,13 +16,13 @@ def main():
     draw = ImageDraw.Draw(image)
     draw.rounded_rectangle(
         (8 * scale, 8 * scale, 248 * scale, 248 * scale),
-        radius=56 * scale, fill="#111820", outline="#31404f", width=2 * scale,
+        radius=64 * scale, fill=BACKGROUND,
     )
-    bars = [(58, 112, 32, 84), (112, 56, 32, 140), (166, 88, 32, 108)]
+    bars = [(71, 135, 22, 60), (117, 65, 22, 130), (163, 101, 22, 94)]
     for x, y, width, height in bars:
         draw.rounded_rectangle(
             (x * scale, y * scale, (x + width) * scale, (y + height) * scale),
-            radius=16 * scale, fill="#7de0d1",
+            radius=11 * scale, fill=FOREGROUND,
         )
     image = image.resize((256, 256), Image.Resampling.LANCZOS)
     metadata = PngImagePlugin.PngInfo()
@@ -27,14 +31,14 @@ def main():
     image.save(assets / "icon.png", optimize=True, pnginfo=metadata)
     image.save(assets / "memori.ico", sizes=[(s, s) for s in [16, 20, 24, 32, 40, 48, 64, 128, 256]])
     rects = "\n".join(
-        f'    <rect x="{x}" y="{y}" width="{w}" height="{h}" rx="16"/>'
+        f'    <rect x="{x}" y="{y}" width="{w}" height="{h}" rx="11"/>'
         for x, y, w, h in bars
     )
     (assets / "icon.svg").write_text(
         '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" role="img" aria-labelledby="title">\n'
         '  <title id="title">Memori</title>\n'
-        '  <rect x="8" y="8" width="240" height="240" rx="56" fill="#111820" stroke="#31404f" stroke-width="2"/>\n'
-        f'  <g fill="#7de0d1">\n{rects}\n  </g>\n</svg>\n',
+        f'  <rect x="8" y="8" width="240" height="240" rx="64" fill="{BACKGROUND}"/>\n'
+        f'  <g fill="{FOREGROUND}">\n{rects}\n  </g>\n</svg>\n',
         encoding="utf-8",
     )
     with Image.open(assets / "memori.ico") as icon:

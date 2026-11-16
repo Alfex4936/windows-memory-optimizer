@@ -10,7 +10,7 @@ Download the Windows x64 ZIP from [Releases](https://github.com/Alfex4936/window
 
 | Compact | Expanded |
 |:---:|:---:|
-| <img src="assets/screenshots/compact.png" width="248" alt="Compact RAM widget with cleanup and expand buttons"> | <img src="assets/screenshots/widget.png" width="320" alt="Expanded memory widget with available RAM and cleanup button"> |
+| <img src="assets/screenshots/compact.png" width="258" alt="Compact RAM widget with cleanup and expand buttons"> | <img src="assets/screenshots/widget.png" width="320" alt="Expanded widget with RAM, CPU, and a process list"> |
 
 The interface is in Korean. The compact widget shows RAM usage, cleanup, and expand controls. The expanded widget opens memory and startup management. Drag the header to move it; position, always-on-top state, and the last widget mode are remembered.
 

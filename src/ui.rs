@@ -24,13 +24,16 @@ use std::{
     time::{Duration, Instant},
 };
 
-const BG: Color32 = Color32::from_rgb(17, 24, 32);
-const NAV: Color32 = Color32::from_rgb(12, 18, 25);
-const PANEL: Color32 = Color32::from_rgb(29, 41, 53);
-const INK: Color32 = Color32::from_rgb(237, 242, 247);
-const MUTED: Color32 = Color32::from_rgb(167, 184, 201);
-const LINE: Color32 = Color32::from_rgb(49, 64, 79);
-const ACCENT: Color32 = Color32::from_rgb(125, 224, 209);
+const BG: Color32 = Color32::from_rgb(19, 21, 27);
+const NAV: Color32 = Color32::from_rgb(13, 15, 20);
+const SURFACE: Color32 = Color32::from_rgb(25, 28, 36);
+const PANEL: Color32 = Color32::from_rgb(34, 38, 48);
+const HOVER: Color32 = Color32::from_rgb(44, 49, 61);
+const INK: Color32 = Color32::from_rgb(244, 245, 248);
+const MUTED: Color32 = Color32::from_rgb(165, 173, 191);
+const LINE: Color32 = Color32::from_rgb(53, 59, 74);
+const ACCENT: Color32 = Color32::from_rgb(210, 247, 128);
+const CPU: Color32 = Color32::from_rgb(197, 181, 255);
 const WARN: Color32 = Color32::from_rgb(240, 193, 122);
 const ERROR: Color32 = Color32::from_rgb(242, 155, 155);
 
@@ -49,6 +52,12 @@ impl Page {
             Self::Optimization => "최적화",
         }
     }
+}
+
+#[derive(Clone, Copy, PartialEq)]
+enum OptimizationTab {
+    Storage,
+    Power,
 }
 
 #[derive(Clone, Copy, PartialEq)]
@@ -206,6 +215,7 @@ pub struct App {
     pinned: bool,
     last_trim: Option<(usize, u64, usize)>,
     page: Page,
+    optimization_tab: OptimizationTab,
     tx: Sender<Command>,
     rx: Receiver<Event>,
     snapshot: Option<Snapshot>,
@@ -273,6 +283,70 @@ const CPU_HELP: &str = "최근 측정 구간의 CPU 사용률 · 전체 CPU 용�
 
 fn button(ui: &mut egui::Ui, text: &str) -> egui::Response {
     ui.add(egui::Button::new(text).min_size(Vec2::new(0.0, 32.0)))
+}
+
+fn surface() -> egui::Frame {
+    egui::Frame::new()
+        .fill(SURFACE)
+        .stroke(Stroke::new(1.0_f32, LINE))
+        .corner_radius(14)
+        .inner_margin(16)
+}
+
+fn primary(text: impl Into<String>) -> egui::Button<'static> {
+    egui::Button::new(RichText::new(text).strong().color(NAV))
+        .fill(ACCENT)
+        .stroke(Stroke::NONE)
+        .corner_radius(9)
+        .min_size(Vec2::new(0.0, 36.0))
+}
+
+fn mark(painter: &egui::Painter, center: Pos2, size: f32) {
+    painter.rect_filled(
+        Rect::from_center_size(center, Vec2::splat(size)),
+        size * 0.27,
+        ACCENT,
+    );
+    for (offset, height) in [(-0.19, 0.25), (0.0, 0.54), (0.19, 0.39)] {
+        painter.rect_filled(
+            Rect::from_min_size(
+                center + Vec2::new((offset - 0.045) * size, (0.28 - height) * size),
+                Vec2::new(0.09 * size, height * size),
+            ),
+            1.5,
+            NAV,
+        );
+    }
+}
+
+fn meter(painter: &egui::Painter, rect: Rect, percent: f32, segments: usize, color: Color32) {
+    let pitch = rect.width() / segments as f32;
+    let active = (percent.clamp(0.0, 1.0) * segments as f32).round() as usize;
+    for index in 0..segments {
+        let cell = Rect::from_min_size(
+            rect.min + Vec2::new(index as f32 * pitch, 0.0),
+            Vec2::new((pitch - 2.0).max(1.0), rect.height()),
+        );
+        painter.rect_filled(cell, 2, if index < active { color } else { LINE });
+    }
+}
+
+fn readout(ui: &mut egui::Ui, label: &str, value: &str, color: Color32, size: f32) {
+    ui.label(RichText::new(label).size(12.0).color(MUTED));
+    ui.label(RichText::new(value).monospace().size(size).color(color));
+}
+
+fn tab_button(ui: &mut egui::Ui, text: &str, selected: bool) -> egui::Response {
+    ui.add(
+        egui::Button::selectable(
+            selected,
+            RichText::new(text).color(if selected { ACCENT } else { MUTED }),
+        )
+        .fill(if selected { PANEL } else { NAV })
+        .stroke(Stroke::new(1.0_f32, if selected { ACCENT } else { LINE }))
+        .corner_radius(8)
+        .min_size(Vec2::new(0.0, 32.0)),
+    )
 }
 
 fn cell(
@@ -385,13 +459,18 @@ fn startup_badge(ui: &mut egui::Ui, state: StartupState) {
         StartupState::WindowsDisabled => ("꺼짐 · Windows", MUTED),
         StartupState::Unknown => ("확인 필요", WARN),
     };
-    let (cell, response) = ui.allocate_exact_size(Vec2::new(130.0, 32.0), Sense::hover());
+    state_badge(ui, label, color);
+}
+
+fn state_badge(ui: &mut egui::Ui, label: &str, color: Color32) {
     let galley = ui
         .painter()
         .layout_no_wrap(label.into(), FontId::proportional(11.0), color);
+    let width = galley.size().x + 26.0;
+    let (cell, response) = ui.allocate_exact_size(Vec2::new(width, 32.0), Sense::hover());
     let badge = Rect::from_min_size(
         Pos2::new(cell.left(), cell.center().y - 12.0),
-        Vec2::new(galley.size().x + 26.0, 24.0),
+        Vec2::new(width, 24.0),
     );
     ui.painter()
         .rect_filled(badge, 12, color.gamma_multiply(0.12));
@@ -464,9 +543,9 @@ fn icon_button(ui: &mut egui::Ui, icon: Icon, selected: bool, label: &str) -> eg
     let primary = matches!(icon, Icon::Optimize | Icon::Check);
     let response = ui.add(
         egui::Button::new("")
-            .fill(if primary {
+            .fill(if primary && ui.is_enabled() {
                 ACCENT
-            } else if selected {
+            } else if selected || primary {
                 PANEL
             } else {
                 BG
@@ -494,7 +573,7 @@ fn icon_button(ui: &mut egui::Ui, icon: Icon, selected: bool, label: &str) -> eg
     let c = response.rect.center();
     let stroke = Stroke::new(
         1.5_f32,
-        if primary {
+        if primary && response.enabled() {
             NAV
         } else if selected || response.hovered() || response.has_focus() {
             ACCENT
@@ -553,9 +632,9 @@ fn icon_button(ui: &mut egui::Ui, icon: Icon, selected: bool, label: &str) -> eg
 
 pub fn widget_size(compact: bool) -> Vec2 {
     if compact {
-        Vec2::new(248.0, 82.0)
+        Vec2::new(258.0, 78.0)
     } else {
-        Vec2::new(380.0, 608.0)
+        Vec2::new(376.0, 566.0)
     }
 }
 
@@ -653,10 +732,13 @@ impl App {
         style.visuals.widgets.inactive.bg_fill = PANEL;
         style.visuals.widgets.inactive.weak_bg_fill = PANEL;
         style.visuals.widgets.inactive.bg_stroke = Stroke::new(1.0_f32, LINE);
-        style.visuals.widgets.hovered.bg_fill = Color32::from_rgb(43, 61, 76);
-        style.visuals.widgets.hovered.weak_bg_fill = Color32::from_rgb(43, 61, 76);
+        style.visuals.widgets.hovered.bg_fill = HOVER;
+        style.visuals.widgets.hovered.weak_bg_fill = HOVER;
         style.visuals.widgets.hovered.bg_stroke = Stroke::new(1.0_f32, ACCENT);
         style.visuals.widgets.active.bg_stroke = Stroke::new(1.5_f32, ACCENT);
+        style.visuals.widgets.inactive.corner_radius = egui::CornerRadius::same(8);
+        style.visuals.widgets.hovered.corner_radius = egui::CornerRadius::same(8);
+        style.visuals.widgets.active.corner_radius = egui::CornerRadius::same(8);
         style.spacing.item_spacing = Vec2::new(10.0, 8.0);
         style.spacing.button_padding = Vec2::new(14.0, 7.0);
         style.spacing.interact_size.y = 28.0;
@@ -749,6 +831,7 @@ impl App {
             widget: starts_as_widget(),
             last_trim: None,
             page,
+            optimization_tab: OptimizationTab::Storage,
             tx,
             rx,
             snapshot: None,
@@ -1063,9 +1146,9 @@ impl App {
                 egui::Frame::new()
                     .fill(BG)
                     .stroke(Stroke::new(1.0_f32, LINE))
-                    .corner_radius(24)
+                    .corner_radius(19)
                     .inner_margin(12)
-                    .outer_margin(8),
+                    .outer_margin(5),
             )
             .show(ctx, |ui| {
                 ui.spacing_mut().item_spacing = Vec2::new(8.0, 0.0);
@@ -1085,24 +1168,46 @@ impl App {
                         .snapshot
                         .as_ref()
                         .map_or("…".into(), |s| format!("{:.0}%", s.percent() * 100.0));
-                    ui.painter().text(
-                        Pos2::new(header.left(), header.center().y),
+                    let painter = ui.painter();
+                    mark(
+                        painter,
+                        Pos2::new(header.left() + 15.0, header.center().y),
+                        30.0,
+                    );
+                    painter.text(
+                        Pos2::new(header.left() + 42.0, header.top() + 10.0),
                         Align2::LEFT_CENTER,
                         "RAM",
                         FontId::proportional(11.0),
                         MUTED,
                     );
-                    ui.painter().text(
-                        Pos2::new(header.left() + 34.0, header.center().y),
-                        Align2::LEFT_CENTER,
+                    painter.text(
+                        Pos2::new(header.right() - 4.0, header.top() + 11.0),
+                        Align2::RIGHT_CENTER,
                         &percent,
-                        FontId::proportional(22.0),
+                        FontId::monospace(21.0),
                         if failed {
                             ERROR
                         } else if stale {
                             WARN
                         } else {
-                            INK
+                            ACCENT
+                        },
+                    );
+                    meter(
+                        painter,
+                        Rect::from_min_max(
+                            Pos2::new(header.left() + 42.0, header.top() + 27.0),
+                            Pos2::new(header.right() - 3.0, header.top() + 34.0),
+                        ),
+                        self.snapshot.as_ref().map_or(0.0, |s| s.percent()),
+                        15,
+                        if failed {
+                            ERROR
+                        } else if stale {
+                            WARN
+                        } else {
+                            ACCENT
                         },
                     );
                     drag.widget_info(|| {
@@ -1167,96 +1272,201 @@ impl App {
 
     fn widget(&mut self, ctx: &egui::Context) {
         egui::CentralPanel::default()
-            .frame(egui::Frame::new().fill(BG).stroke(Stroke::new(1.0_f32,LINE))
-                .corner_radius(18).inner_margin(22).outer_margin(8))
+            .frame(
+                egui::Frame::new()
+                    .fill(BG)
+                    .stroke(Stroke::new(1.0_f32, LINE))
+                    .corner_radius(20)
+                    .inner_margin(18)
+                    .outer_margin(6),
+            )
             .show(ctx, |ui| {
-                ui.spacing_mut().item_spacing = Vec2::new(8.0,6.0);
+                ui.spacing_mut().item_spacing = Vec2::new(8.0, 6.0);
                 ui.style_mut().interaction.selectable_labels = false;
                 ui.horizontal(|ui| {
-                    let (header,_) = ui.allocate_exact_size(Vec2::new(ui.available_width()-108.0,28.0),Sense::hover());
-                    let drag = self.widget_drag(ui, ctx, header, 22.0);
-                    drag.widget_info(||egui::WidgetInfo::labeled(egui::WidgetType::Other,true,"위젯 이동 영역"));
-                    for (i,h) in [10.0,20.0,14.0].iter().enumerate() {
-                        ui.painter().rect_filled(Rect::from_min_size(Pos2::new(header.left()+i as f32*7.0,header.center().y+10.0-h),Vec2::new(4.0,*h)),2.0,ACCENT);
-                    }
-                    ui.painter().text(Pos2::new(header.left()+31.0,header.center().y),Align2::LEFT_CENTER,"memori",FontId::proportional(20.0),INK);
+                    let (header, _) = ui.allocate_exact_size(
+                        Vec2::new(ui.available_width() - 108.0, 28.0),
+                        Sense::hover(),
+                    );
+                    let drag = self.widget_drag(ui, ctx, header, 18.0);
+                    drag.widget_info(|| {
+                        egui::WidgetInfo::labeled(egui::WidgetType::Other, true, "위젯 이동 영역")
+                    });
+                    mark(
+                        ui.painter(),
+                        Pos2::new(header.left() + 14.0, header.center().y),
+                        28.0,
+                    );
+                    ui.painter().text(
+                        Pos2::new(header.left() + 39.0, header.center().y),
+                        Align2::LEFT_CENTER,
+                        "memori",
+                        FontId::proportional(21.0),
+                        INK,
+                    );
                     drag.on_hover_text("상단 여백·로고·이름을 잡아 위젯 이동");
-                    if icon_button(ui,Icon::Collapse,false,"컴팩트 모드로 접기").clicked() {self.set_compact(ctx,true);}
+                    if icon_button(ui, Icon::Collapse, false, "컴팩트 모드로 접기").clicked()
+                    {
+                        self.set_compact(ctx, true);
+                    }
                     if icon_button(ui, Icon::Pin, self.pinned, "항상 위에 표시").clicked() {
                         self.preferences.pinned = !self.pinned;
                         if self.persist_preferences() {
                             self.pinned = self.preferences.pinned;
-                            ctx.send_viewport_cmd(egui::ViewportCommand::WindowLevel(if self.pinned {egui::WindowLevel::AlwaysOnTop} else {egui::WindowLevel::Normal}));
-                        } else { self.preferences.pinned = self.pinned; }
+                            ctx.send_viewport_cmd(egui::ViewportCommand::WindowLevel(
+                                if self.pinned {
+                                    egui::WindowLevel::AlwaysOnTop
+                                } else {
+                                    egui::WindowLevel::Normal
+                                },
+                            ));
+                        } else {
+                            self.preferences.pinned = self.pinned;
+                        }
                     }
-                    if icon_button(ui, Icon::Close, false, "Memori 종료").clicked() { ctx.send_viewport_cmd(egui::ViewportCommand::Close); }
+                    if icon_button(ui, Icon::Close, false, "Memori 종료").clicked() {
+                        ctx.send_viewport_cmd(egui::ViewportCommand::Close);
+                    }
                 });
-                ui.add_space(10.0);
-                let Some(s) = self.snapshot.clone() else { ui.label(RichText::new("메모리를 읽고 있습니다…").color(MUTED)); return; };
+                ui.add_space(8.0);
+                let Some(s) = self.snapshot.clone() else {
+                    ui.label(RichText::new("메모리를 읽고 있습니다…").color(MUTED));
+                    return;
+                };
+                self.widget_metrics(ui, &s);
+                ui.add_space(8.0);
                 let targets: Vec<_> = s.processes.iter().filter(|p| p.eligible).cloned().collect();
                 let count = targets.len();
-                ui.horizontal(|ui| {
-                    ui.label(RichText::new("사용 가능한 메모리").size(12.0).color(MUTED));
-                    ui.with_layout(Layout::right_to_left(Align::Center),|ui| {
-                        ui.label(RichText::new(format!("{:.0}% 사용 중",s.percent()*100.0)).size(12.0).color(MUTED));
-                    });
-                });
-                ui.horizontal(|ui| {
-                    ui.label(RichText::new(bytes(s.available)).size(29.0).strong().color(INK));
-                    ui.label(RichText::new(format!("/ {}",bytes(s.total))).size(13.0).color(MUTED));
-                    ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
-                        ui.label(RichText::new(format!("CPU {}",cpu_usage(s.cpu_percent))).size(12.0).color(INK)).on_hover_text(CPU_HELP);
-                    });
-                });
-                let (strip,_) = ui.allocate_exact_size(Vec2::new(ui.available_width(),18.0),Sense::hover());
-                let used = (s.percent()*40.0).round() as usize;
-                let cell = (strip.width()-3.0*39.0)/40.0;
-                for i in 0..40 {
-                    let r = Rect::from_min_size(Pos2::new(strip.left()+i as f32*(cell+3.0),strip.top()),Vec2::new(cell,strip.height()));
-                    ui.painter().rect_filled(r,1.5,if i < used {LINE} else {ACCENT});
+                let stale =
+                    s.at.elapsed()
+                        .map_or(true, |age| age > Duration::from_secs(10));
+                let label = if self.busy {
+                    "정리 중…"
+                } else {
+                    "메모리 정리"
+                };
+                if ui
+                    .add_enabled(
+                        count > 0 && !self.busy && !stale,
+                        primary(label).min_size(Vec2::new(ui.available_width(), 38.0)),
+                    )
+                    .on_hover_text(format!(
+                        "정리 가능한 앱 {count}개의 작업 집합을 줄입니다. 앱은 계속 실행됩니다."
+                    ))
+                    .clicked()
+                {
+                    self.busy = true;
+                    self.notice = None;
+                    self.last_trim = None;
+                    self.failures.clear();
+                    self.send(Command::Trim(targets));
                 }
-                ui.horizontal(|ui| {
-                    ui.label(RichText::new(format!("정리 가능 {count}개 앱")).size(11.0).color(MUTED));
-                    ui.with_layout(Layout::right_to_left(Align::Center),|ui| { ui.label(RichText::new("자동 정리 없음").size(11.0).color(MUTED)); });
-                });
-                ui.add_space(5.0);
-                let stale = s.at.elapsed().map_or(true, |age|age > Duration::from_secs(10));
-                let label = if self.busy { "정리 중…" } else { "메모리 정리" };
-                if ui.add_enabled(count > 0 && !self.busy && !stale,egui::Button::new(RichText::new(label).size(14.0).strong().color(NAV)).fill(ACCENT).corner_radius(12).min_size(Vec2::new(ui.available_width(),42.0)))
-                    .on_hover_text(format!("내 계정의 정리 가능한 앱 {count}개 작업 집합을 줄입니다. 앱을 종료하지 않으며 다음 사용 시 잠깐 느려질 수 있습니다.")).clicked() {
-                    self.busy = true; self.notice = None; self.last_trim = None; self.failures.clear(); self.send(Command::Trim(targets));
-                }
-                let feedback = if let Some((count,reclaimed,failed)) = self.last_trim {
-                    format!("{count}개 · {} 감소{}",bytes(reclaimed),if failed > 0 {format!(" · 제외 {failed}")} else {String::new()})
-                } else if self.notice.as_ref().is_some_and(|(_,error)|*error) { "조회 실패 · 관리 화면에서 확인하세요".into() }
-                else if stale { "조회 지연 · 잠시 후 다시 시도하세요".into() }
-                else { "앱 사용 시 메모리가 다시 늘어날 수 있어요".into() };
-                ui.add(egui::Label::new(RichText::new(&feedback).size(11.0).color(if stale {WARN} else {MUTED})).truncate()).on_hover_text(feedback);
-                ui.add_space(7.0);
-                ui.separator();
-                ui.add_space(5.0);
+                let feedback = if let Some((count, reclaimed, failed)) = self.last_trim {
+                    let skipped = if failed > 0 {
+                        format!(" · 제외 {failed}")
+                    } else {
+                        String::new()
+                    };
+                    format!("{count}개 앱 · {} 감소{skipped}", bytes(reclaimed))
+                } else if self.notice.as_ref().is_some_and(|(_, error)| *error) {
+                    "조회 실패 · 관리 화면에서 확인하세요".into()
+                } else if stale {
+                    "조회 지연 · 잠시 후 다시 시도하세요".into()
+                } else {
+                    format!("정리 가능 {count}개 앱 · 작업 집합 일시 감소")
+                };
+                ui.add(
+                    egui::Label::new(RichText::new(&feedback).size(11.0).color(if stale {
+                        WARN
+                    } else {
+                        MUTED
+                    }))
+                    .truncate(),
+                )
+                .on_hover_text(feedback);
+                ui.add_space(9.0);
                 self.widget_processes(ui, &s);
                 ui.add_space(3.0);
+                ui.separator();
                 ui.horizontal(|ui| {
-                    if ui.add(egui::Button::new("전체 프로세스").frame(false)).clicked() {
-                        self.navigate(Page::Memory);
-                        self.process_sort = self.widget_sort; self.set_widget(ctx,false);
+                    let width = (ui.available_width() - 2.0 * ui.spacing().item_spacing.x) / 3.0;
+                    for (title, page) in [
+                        ("전체 프로세스", Page::Memory),
+                        ("시작 앱", Page::Startup),
+                        ("최적화", Page::Optimization),
+                    ] {
+                        if ui
+                            .add_sized(
+                                [width, 31.0],
+                                egui::Button::new(RichText::new(title).size(12.0)).fill(SURFACE),
+                            )
+                            .clicked()
+                        {
+                            self.navigate(page);
+                            if page == Page::Memory {
+                                self.process_sort = self.widget_sort;
+                            }
+                            self.set_widget(ctx, false);
+                        }
                     }
-                    ui.with_layout(Layout::right_to_left(Align::Center),|ui| {
-                        if ui.add(egui::Button::new("시작 프로그램").frame(false)).clicked() {
-                            self.navigate(Page::Startup); self.set_widget(ctx,false);
-                        }
-                        if ui.add(egui::Button::new("최적화").frame(false)).clicked() {
-                            self.navigate(Page::Optimization); self.set_widget(ctx,false);
-                        }
-                    });
                 });
             });
     }
 
+    fn widget_metrics(&self, ui: &mut egui::Ui, snapshot: &Snapshot) {
+        surface().inner_margin(12).show(ui, |ui| {
+            ui.spacing_mut().item_spacing.y = 3.0;
+            ui.columns(2, |columns| {
+                let percent = snapshot.percent();
+                readout(
+                    &mut columns[0],
+                    "RAM 사용량",
+                    &format!("{:.0}%", percent * 100.0),
+                    ACCENT,
+                    28.0,
+                );
+                let (ram_meter, _) = columns[0].allocate_exact_size(
+                    Vec2::new(columns[0].available_width().min(140.0), 9.0),
+                    Sense::hover(),
+                );
+                meter(columns[0].painter(), ram_meter, percent, 20, ACCENT);
+                columns[0]
+                    .label(
+                        RichText::new(format!("{} 사용 가능", bytes(snapshot.available)))
+                            .size(11.0)
+                            .color(MUTED),
+                    )
+                    .on_hover_text(format!("물리 메모리 총 {}", bytes(snapshot.total)));
+
+                readout(
+                    &mut columns[1],
+                    "CPU 사용률",
+                    &cpu_usage(snapshot.cpu_percent),
+                    CPU,
+                    28.0,
+                );
+                let (cpu_meter, response) = columns[1].allocate_exact_size(
+                    Vec2::new(columns[1].available_width().min(140.0), 9.0),
+                    Sense::hover(),
+                );
+                response.on_hover_text(CPU_HELP);
+                meter(
+                    columns[1].painter(),
+                    cpu_meter,
+                    snapshot.cpu_percent.unwrap_or_default() / 100.0,
+                    20,
+                    CPU,
+                );
+                columns[1]
+                    .label(RichText::new("전체 CPU 기준").size(11.0).color(MUTED))
+                    .on_hover_text(CPU_HELP);
+            });
+        });
+    }
+
     fn widget_processes(&mut self, ui: &mut egui::Ui, snapshot: &Snapshot) {
         ui.horizontal(|ui| {
-            ui.label(RichText::new("프로세스").size(14.0).strong());
+            ui.label(RichText::new("프로세스").size(16.0).strong());
             ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
                 ui.label(
                     RichText::new(if self.widget_sort.descending {
@@ -1309,8 +1519,15 @@ impl App {
         } else {
             ui.scope(|ui| {
                 ui.spacing_mut().item_spacing.y = 4.0;
-                for process in rows.iter().take(5) {
+                for (index, process) in rows.iter().take(5).enumerate() {
                     ui.push_id((process.pid, process.created), |ui| {
+                        if index % 2 == 0 {
+                            let row = Rect::from_min_size(
+                                ui.cursor().min - Vec2::new(5.0, 0.0),
+                                Vec2::new(ui.available_width() + 10.0, 28.0),
+                            );
+                            ui.painter().rect_filled(row, 5, SURFACE);
+                        }
                         ui.horizontal(|ui| {
                             cell(
                                 ui,
@@ -1329,8 +1546,9 @@ impl App {
                                 28.0,
                                 RichText::new(cpu_usage(process.cpu_percent))
                                     .size(12.0)
+                                    .monospace()
                                     .color(if process.cpu_percent.is_some() {
-                                        INK
+                                        CPU
                                     } else {
                                         MUTED
                                     }),
@@ -1343,7 +1561,7 @@ impl App {
                                 28.0,
                                 RichText::new(bytes(process.bytes))
                                     .size(12.0)
-                                    .strong()
+                                    .monospace()
                                     .color(if self.widget_sort.column == Column::Memory {
                                         ACCENT
                                     } else {
@@ -1374,30 +1592,33 @@ impl App {
             .show(ctx, |ui| {
                 ui.horizontal(|ui| {
                     let (rect, _) = ui.allocate_exact_size(Vec2::splat(26.0), Sense::hover());
-                    for (i, h) in [13.0, 23.0, 17.0].iter().enumerate() {
-                        let r = Rect::from_min_size(
-                            Pos2::new(rect.left() + i as f32 * 8.0, rect.bottom() - h),
-                            Vec2::new(5.0, *h),
-                        );
-                        ui.painter().rect_filled(r, 2.0, ACCENT);
-                    }
+                    mark(ui.painter(), rect.center(), 26.0);
                     ui.label(RichText::new("memori").size(22.0).strong());
                 });
-                ui.add_space(42.0);
+                ui.add_space(31.0);
                 for page in [Page::Memory, Page::Startup, Page::Optimization] {
                     let selected = self.page == page;
                     let response = ui.add_sized(
                         [ui.available_width(), 42.0],
-                        egui::Button::new(
+                        egui::Button::selectable(
+                            selected,
                             RichText::new(page.title()).size(14.0).color(if selected {
                                 ACCENT
                             } else {
-                                MUTED
+                                INK
                             }),
                         )
                         .fill(if selected { PANEL } else { NAV })
+                        .corner_radius(9)
                         .stroke(Stroke::NONE),
                     );
+                    if selected {
+                        let marker = Rect::from_center_size(
+                            Pos2::new(response.rect.left() + 6.0, response.rect.center().y),
+                            Vec2::new(3.0, 18.0),
+                        );
+                        ui.painter().rect_filled(marker, 2, ACCENT);
+                    }
                     if response.clicked() {
                         self.navigate(page);
                     }
@@ -1410,11 +1631,6 @@ impl App {
                             .color(MUTED),
                     );
                     ui.add_space(8.0);
-                    ui.label(
-                        RichText::new("필요할 때만, 가볍게.")
-                            .size(12.0)
-                            .color(MUTED),
-                    );
                     ui.separator();
                     if button(ui, "작은 위젯으로").clicked() {
                         self.set_widget(ctx, true);
@@ -1430,18 +1646,43 @@ impl App {
     }
 
     fn optimization(&mut self, ui: &mut egui::Ui) {
+        ui.horizontal(|ui| {
+            for (tab, label) in [
+                (OptimizationTab::Storage, "저장소 정리"),
+                (OptimizationTab::Power, "전력 관리"),
+            ] {
+                if tab_button(ui, label, self.optimization_tab == tab).clicked() {
+                    self.optimization_tab = tab;
+                }
+            }
+        });
+        ui.add_space(10.0);
         egui::ScrollArea::vertical()
-            .id_salt("optimization")
+            .id_salt(match self.optimization_tab {
+                OptimizationTab::Storage => "storage",
+                OptimizationTab::Power => "power",
+            })
             .show(ui, |ui| {
-                self.storage_controls(ui);
-                ui.add_space(16.0);
-                ui.separator();
-                ui.add_space(8.0);
-                self.cleanup_controls(ui);
-                ui.add_space(16.0);
-                ui.separator();
-                ui.add_space(8.0);
-                self.power_controls(ui);
+                let width = ui.available_width();
+                match self.optimization_tab {
+                    OptimizationTab::Storage => {
+                        surface().show(ui, |ui| {
+                            ui.set_min_width(width - 34.0);
+                            self.cleanup_controls(ui);
+                        });
+                        ui.add_space(12.0);
+                        surface().show(ui, |ui| {
+                            ui.set_min_width(width - 34.0);
+                            self.storage_controls(ui);
+                        });
+                    }
+                    OptimizationTab::Power => {
+                        surface().show(ui, |ui| {
+                            ui.set_min_width(width - 34.0);
+                            self.power_controls(ui);
+                        });
+                    }
+                }
             });
     }
 
@@ -1491,21 +1732,17 @@ impl App {
             self.cleanup,
             CleanupState::Scanning { .. } | CleanupState::Cleaning(_)
         );
-        ui.horizontal_wrapped(|ui| {
+        ui.horizontal(|ui| {
             ui.label(RichText::new("임시 파일 정리").size(19.0).strong());
-            if ui
-                .add_enabled(
-                    !busy,
-                    egui::Button::new("임시 파일 검사").min_size(Vec2::new(0.0, 32.0)),
-                )
-                .clicked()
-            {
-                self.scan_cleanup(ui.ctx());
-            }
+            ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
+                if ui.add_enabled(!busy, primary("임시 파일 검사")).clicked() {
+                    self.scan_cleanup(ui.ctx());
+                }
+            });
         });
         match &mut self.cleanup {
             CleanupState::Idle => {
-                ui.label(RichText::new("현재 계정의 임시 폴더와 DirectX 셰이더 캐시에서 24시간 이상 지난 파일을 검사합니다.").color(MUTED));
+                ui.label(RichText::new("24시간 이상 된 임시 파일과 DirectX 셰이더 캐시의 용량을 확인한 뒤 정리할 파일을 고를 수 있습니다.").color(MUTED));
             }
             CleanupState::Scanning { latest, cancel, .. } => {
                 let stopping = cancel.load(Ordering::Relaxed);
@@ -1629,10 +1866,7 @@ impl App {
         let mut confirm = false;
         ui.horizontal_wrapped(|ui| {
             confirm = ui
-                .add_enabled(
-                    !review.selected.is_empty(),
-                    egui::Button::new("선택한 파일 정리").min_size(Vec2::new(0.0, 32.0)),
-                )
+                .add_enabled(!review.selected.is_empty(), primary("선택한 파일 정리"))
                 .clicked();
             ui.label(
                 RichText::new(format!(
@@ -1870,7 +2104,7 @@ impl App {
             .max(29.0);
         egui::ScrollArea::vertical()
             .id_salt("power-apps")
-            .max_height(124.0)
+            .max_height(174.0)
             .auto_shrink([false, true])
             .show_rows(ui, row_height, rows.len(), |ui, range| {
                 for process in &rows[range] {
@@ -1994,29 +2228,48 @@ impl App {
                 ui.label(RichText::new("조회할 고정 드라이브가 없습니다.").color(MUTED));
             }
             Some(Ok(drives)) => {
+                ui.add_space(5.0);
                 for drive in drives {
-                    ui.horizontal(|ui| {
-                        ui.label(RichText::new(format!("{}:", drive.letter)).strong());
-                        if let Some(space) = &drive.space {
-                            let free = space.available as f32 / space.total as f32;
-                            ui.add(
-                                egui::ProgressBar::new(1.0 - free)
-                                    .desired_width(124.0)
-                                    .fill(if free < 0.1 { WARN } else { ACCENT }),
-                            )
-                            .on_hover_text(format!("{:.0}% 사용 중", (1.0 - free) * 100.0));
-                            ui.label(format!(
-                                "{} 여유 / {}",
-                                bytes(space.available),
-                                bytes(space.total)
-                            ));
-                            if free < 0.1 {
-                                ui.label(RichText::new("여유 10% 미만").small().color(WARN));
-                            }
-                        } else {
-                            ui.label(RichText::new("용량 조회 불가").color(WARN));
-                        }
-                    });
+                    egui::Frame::new()
+                        .fill(NAV)
+                        .corner_radius(8)
+                        .inner_margin(9)
+                        .show(ui, |ui| {
+                            ui.horizontal(|ui| {
+                                ui.label(
+                                    RichText::new(format!("{}:", drive.letter))
+                                        .monospace()
+                                        .size(17.0),
+                                );
+                                if let Some(space) = &drive.space {
+                                    let free = space.available as f32 / space.total as f32;
+                                    let color = if free < 0.1 { WARN } else { ACCENT };
+                                    let (rect, response) = ui
+                                        .allocate_exact_size(Vec2::new(160.0, 9.0), Sense::hover());
+                                    meter(ui.painter(), rect, 1.0 - free, 24, color);
+                                    response.on_hover_text(format!(
+                                        "{:.0}% 사용 중",
+                                        (1.0 - free) * 100.0
+                                    ));
+                                    ui.label(
+                                        RichText::new(format!(
+                                            "{} 여유 / {}",
+                                            bytes(space.available),
+                                            bytes(space.total)
+                                        ))
+                                        .color(MUTED),
+                                    );
+                                    if free < 0.1 {
+                                        ui.label(
+                                            RichText::new("여유 10% 미만").small().color(WARN),
+                                        );
+                                    }
+                                } else {
+                                    ui.label(RichText::new("용량 조회 불가").color(WARN));
+                                }
+                                ui.allocate_space(Vec2::new(ui.available_width(), 0.0));
+                            });
+                        });
                 }
             }
             Some(Err(error)) => {
@@ -2105,46 +2358,65 @@ impl App {
             ui.label(RichText::new("Windows 메모리 정보를 읽고 있습니다…").color(MUTED));
             return;
         };
-        ui.horizontal(|ui| {
-            ui.label(
-                RichText::new(format!(
-                    "물리 메모리  {} / {}",
-                    bytes(s.total - s.available),
-                    bytes(s.total)
-                ))
-                .size(16.0)
-                .strong(),
-            );
-            ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
-                ui.label(
-                    RichText::new(format!("{:.0}% 사용 중", s.percent() * 100.0))
-                        .size(16.0)
-                        .color(ACCENT),
-                );
+        surface().show(ui, |ui| {
+            ui.horizontal_top(|ui| {
+                ui.vertical(|ui| {
+                    ui.set_width(192.0);
+                    ui.spacing_mut().item_spacing.y = 5.0;
+                    readout(
+                        ui,
+                        "물리 메모리 사용량",
+                        &format!("{:.0}%", s.percent() * 100.0),
+                        ACCENT,
+                        43.0,
+                    );
+                    ui.label(
+                        RichText::new(format!(
+                            "{} / {}",
+                            bytes(s.total - s.available),
+                            bytes(s.total)
+                        ))
+                        .monospace()
+                        .size(13.0)
+                        .color(INK),
+                    );
+                    ui.label(
+                        RichText::new(format!("{} 사용 가능", bytes(s.available)))
+                            .size(12.0)
+                            .color(MUTED),
+                    );
+                });
+                ui.add_space(6.0);
+                ui.vertical(|ui| {
+                    ui.horizontal(|ui| {
+                        ui.label(RichText::new("RAM 사용 추이").size(13.0).strong());
+                        ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
+                            ui.label(
+                                RichText::new(format!("CPU {}", cpu_usage(s.cpu_percent)))
+                                    .size(12.0)
+                                    .color(CPU),
+                            )
+                            .on_hover_text(CPU_HELP);
+                        });
+                    });
+                    self.chart(ui);
+                });
             });
-        });
-        ui.add_space(4.0);
-        self.chart(ui);
-        ui.horizontal_wrapped(|ui| {
-            ui.label(RichText::new(format!("사용 가능  {}", bytes(s.available))).color(ACCENT));
-            ui.label(RichText::new("   /   ").color(MUTED));
+            ui.separator();
             ui.label(
                 RichText::new(format!(
                     "커밋  {} / {}",
                     bytes(s.commit),
                     bytes(s.commit_limit)
                 ))
+                .size(12.0)
                 .color(MUTED),
             )
             .on_hover_text(
                 "Windows가 프로세스에 약속한 메모리 / RAM과 페이지 파일을 합친 커밋 한도",
             );
-            ui.label(RichText::new(format!("  /  CPU {}", cpu_usage(s.cpu_percent))).color(INK))
-                .on_hover_text(CPU_HELP);
         });
-        ui.add_space(20.0);
-        ui.separator();
-        ui.add_space(10.0);
+        ui.add_space(13.0);
         ui.horizontal(|ui| {
             ui.label(RichText::new("프로세스").size(19.0).strong());
             ui.label(
@@ -2188,8 +2460,13 @@ impl App {
                 p.name.to_lowercase().contains(&filter) || p.pid.to_string().contains(&filter)
             })
             .collect();
-        ui.add_space(5.0);
-        let narrow = ui.available_width() < 720.0;
+        let (pid_width, cpu_width, ram_width, status_width) = if ui.available_width() < 720.0 {
+            (58.0, 64.0, 86.0, 114.0)
+        } else {
+            (72.0, 76.0, 100.0, 140.0)
+        };
+        let reserved =
+            pid_width + cpu_width + ram_width + status_width + 4.0 * ui.spacing().item_spacing.x;
         ui.horizontal(|ui| {
             let mut all = processes.iter().any(|p| p.eligible)
                 && processes
@@ -2221,7 +2498,7 @@ impl App {
                     }
                 }
             }
-            let name_width = (ui.available_width() - if narrow { 278.0 } else { 428.0 }).max(80.0);
+            let name_width = (ui.available_width() - reserved).max(80.0);
             sort_header(
                 ui,
                 &mut self.process_sort,
@@ -2235,7 +2512,7 @@ impl App {
                 &mut self.process_sort,
                 Column::Pid,
                 "PID",
-                72.0,
+                pid_width,
                 Align::RIGHT,
             );
             sort_header(
@@ -2243,7 +2520,7 @@ impl App {
                 &mut self.process_sort,
                 Column::Cpu,
                 "CPU",
-                76.0,
+                cpu_width,
                 Align::RIGHT,
             );
             sort_header(
@@ -2251,28 +2528,27 @@ impl App {
                 &mut self.process_sort,
                 Column::Memory,
                 "작업 집합",
-                100.0,
+                ram_width,
                 Align::RIGHT,
             );
-            if !narrow {
-                sort_header(
-                    ui,
-                    &mut self.process_sort,
-                    Column::Status,
-                    "정리 상태",
-                    140.0,
-                    Align::LEFT,
-                );
-            }
+            sort_header(
+                ui,
+                &mut self.process_sort,
+                Column::Status,
+                "정리 상태",
+                status_width,
+                Align::LEFT,
+            );
         });
         self.process_sort.sort(&mut processes);
         ui.separator();
-        let list_height = (ui.available_height() - 120.0).max(55.0);
+        let list_height = (ui.available_height() - 85.0).max(90.0);
         egui::ScrollArea::vertical()
             .id_salt("processes")
             .max_height(list_height)
             .auto_shrink([false, false])
             .show(ui, |ui| {
+                ui.spacing_mut().item_spacing.y = 3.0;
                 if processes.is_empty() {
                     ui.add_space(18.0);
                     ui.label(
@@ -2280,11 +2556,23 @@ impl App {
                             .color(MUTED),
                     );
                 }
-                for p in processes {
+                for (index, p) in processes.into_iter().enumerate() {
                     ui.push_id((p.pid, p.created), |ui| {
+                        let selected = self.selected.contains(&(p.pid, p.created));
+                        if selected || index % 2 == 0 {
+                            let row = Rect::from_min_size(
+                                ui.cursor().min,
+                                Vec2::new(ui.available_width(), 32.0),
+                            );
+                            ui.painter().rect_filled(
+                                row,
+                                6,
+                                if selected { PANEL } else { SURFACE },
+                            );
+                        }
                         ui.horizontal(|ui| {
-                            ui.set_min_height(34.0);
-                            let mut selected = self.selected.contains(&(p.pid, p.created));
+                            ui.set_min_height(32.0);
+                            let mut selected = selected;
                             let check_response = ui
                                 .add_enabled(
                                     p.eligible && !self.busy,
@@ -2306,7 +2594,6 @@ impl App {
                                     self.selected.remove(&(p.pid, p.created));
                                 }
                             }
-                            let reserved = if narrow { 278.0 } else { 428.0 };
                             cell(
                                 ui,
                                 (ui.available_width() - reserved).max(80.0),
@@ -2317,46 +2604,41 @@ impl App {
                             .on_hover_text(&p.path);
                             cell(
                                 ui,
-                                72.0,
+                                pid_width,
                                 28.0,
-                                RichText::new(p.pid.to_string()).color(MUTED),
+                                RichText::new(p.pid.to_string()).monospace().color(MUTED),
                                 Align::RIGHT,
                             );
                             cell(
                                 ui,
-                                76.0,
+                                cpu_width,
                                 28.0,
                                 RichText::new(cpu_usage(p.cpu_percent))
-                                    .color(if p.cpu_percent.is_some() { INK } else { MUTED }),
+                                    .monospace()
+                                    .color(if p.cpu_percent.is_some() { CPU } else { MUTED }),
                                 Align::RIGHT,
                             )
                             .on_hover_text(CPU_HELP);
                             cell(
                                 ui,
-                                100.0,
+                                ram_width,
                                 28.0,
-                                RichText::new(bytes(p.bytes)).color(INK),
+                                RichText::new(bytes(p.bytes)).monospace().color(INK),
                                 Align::RIGHT,
                             );
-                            if !narrow {
-                                cell(
-                                    ui,
-                                    140.0,
-                                    28.0,
-                                    RichText::new(&p.reason).small().color(if p.eligible {
-                                        MUTED
-                                    } else {
-                                        WARN
-                                    }),
-                                    Align::LEFT,
-                                );
-                            }
+                            cell(
+                                ui,
+                                status_width,
+                                28.0,
+                                RichText::new(&p.reason).small().color(if p.eligible {
+                                    MUTED
+                                } else {
+                                    WARN
+                                }),
+                                Align::LEFT,
+                            )
+                            .on_hover_text(&p.reason);
                         });
-                        ui.painter().hline(
-                            ui.min_rect().x_range(),
-                            ui.cursor().top(),
-                            Stroke::new(0.5_f32, LINE),
-                        );
                     });
                 }
             });
@@ -2370,10 +2652,13 @@ impl App {
             } else {
                 format!("선택한 {count}개 정리")
             };
-            let primary = egui::Button::new(RichText::new(text).color(NAV).strong())
-                .fill(ACCENT)
-                .min_size(Vec2::new(200.0, 38.0));
-            if ui.add_enabled(count > 0 && !self.busy, primary).clicked() {
+            if ui
+                .add_enabled(
+                    count > 0 && !self.busy,
+                    primary(text).min_size(Vec2::new(200.0, 36.0)),
+                )
+                .clicked()
+            {
                 let targets = s
                     .processes
                     .iter()
@@ -2395,9 +2680,9 @@ impl App {
 
     fn chart(&self, ui: &mut egui::Ui) {
         let height = if ui.available_height() < 540.0 {
-            105.0
+            90.0
         } else {
-            150.0
+            112.0
         };
         let (rect, _) =
             ui.allocate_exact_size(Vec2::new(ui.available_width(), height), Sense::hover());
@@ -2421,14 +2706,25 @@ impl App {
             );
         }
         let now = Instant::now();
+        let oldest = self
+            .history
+            .front()
+            .map_or(0, |(at, _)| now.duration_since(*at).as_secs());
+        let span = [15, 30, 60, 120]
+            .into_iter()
+            .find(|seconds| *seconds > oldest)
+            .unwrap_or(120);
         let points: Vec<Pos2> = self
             .history
             .iter()
-            .map(|(t, v)| {
-                Pos2::new(
-                    plot.right() - (now.duration_since(*t).as_secs_f32() / 120.0) * plot.width(),
-                    plot.bottom() - v * plot.height(),
-                )
+            .filter_map(|(t, v)| {
+                let age = now.duration_since(*t).as_secs_f32();
+                (age <= span as f32).then(|| {
+                    Pos2::new(
+                        plot.right() - (age / span as f32) * plot.width(),
+                        plot.bottom() - v * plot.height(),
+                    )
+                })
             })
             .collect();
         if points.len() >= 2 {
@@ -2442,7 +2738,8 @@ impl App {
                     Pos2::new(pair[1].x, plot.bottom()),
                     Pos2::new(pair[0].x, plot.bottom()),
                 ] {
-                    mesh.colored_vertex(p, ACCENT.gamma_multiply(0.08));
+                    let opacity = if p.y == plot.bottom() { 0.03 } else { 0.24 };
+                    mesh.colored_vertex(p, ACCENT.gamma_multiply(opacity));
                 }
                 mesh.add_triangle(start, start + 1, start + 2);
                 mesh.add_triangle(start, start + 2, start + 3);
@@ -2459,7 +2756,7 @@ impl App {
         painter.text(
             Pos2::new(plot.left(), rect.bottom()),
             Align2::LEFT_BOTTOM,
-            "120초 전",
+            format!("{span}초 전"),
             FontId::proportional(11.0),
             MUTED,
         );
@@ -2482,21 +2779,45 @@ impl App {
     }
 
     fn startup(&mut self, ui: &mut egui::Ui) {
-        ui.label(RichText::new("로그인할 때 실행되는 앱을 고르세요.").size(16.0));
-        ui.add_space(4.0);
-        ui.label(
-            RichText::new("내 계정 항목은 원본을 보관한 뒤 끄고, 언제든 복원할 수 있습니다.")
-                .color(MUTED),
-        );
-        ui.add_space(8.0);
-        let mut launch_at_login = self.launch_at_login;
-        if ui.add_enabled(!self.startup_busy, egui::Checkbox::new(&mut launch_at_login,"Windows 로그인 시 Memori 위젯 자동 실행"))
-            .on_hover_text("현재 계정의 시작 항목에 Memori만 등록합니다. Windows가 차단한 항목은 Windows 시작 앱 설정에서 확인하세요.").changed() {
-            match preferences::set_launch_at_login(launch_at_login) {
-                Ok(()) => { self.launch_at_login = launch_at_login; self.startup_busy = true; self.send(Command::Startup); }
-                Err(error) => { self.notice = Some((error,true)); }
-            }
-        }
+        surface().inner_margin(13).show(ui, |ui| {
+            ui.horizontal(|ui| {
+                let (logo, _) = ui.allocate_exact_size(Vec2::splat(36.0), Sense::hover());
+                mark(ui.painter(), logo.center(), 36.0);
+                ui.vertical(|ui| {
+                    ui.spacing_mut().item_spacing.y = 2.0;
+                    ui.label(RichText::new("로그인 시 Memori 위젯 열기").strong());
+                    ui.label(
+                        RichText::new("이 Windows 계정에서 자동 실행")
+                            .size(12.0)
+                            .color(MUTED),
+                    );
+                });
+                ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
+                    let on = self.launch_at_login;
+                    let toggle = ui
+                        .add_enabled_ui(!self.startup_busy, |ui| {
+                            startup_switch(ui, on, "로그인 시 Memori 위젯 열기")
+                        })
+                        .inner
+                        .on_hover_text("Windows 로그인 시 Memori 위젯을 자동으로 엽니다.");
+                    if toggle.clicked() {
+                        match preferences::set_launch_at_login(!on) {
+                            Ok(()) => {
+                                self.launch_at_login = !on;
+                                self.startup_busy = true;
+                                self.send(Command::Startup);
+                            }
+                            Err(error) => self.notice = Some((error, true)),
+                        }
+                    }
+                    state_badge(
+                        ui,
+                        if on { "켜짐" } else { "꺼짐" },
+                        if on { ACCENT } else { MUTED },
+                    );
+                });
+            });
+        });
         ui.add_space(12.0);
         ui.horizontal(|ui| {
             for (filter, label) in [
@@ -2511,19 +2832,7 @@ impl App {
                     .filter(|e| filter.matches(e.state))
                     .count();
                 let selected = self.startup_filter == filter;
-                if ui
-                    .add(
-                        egui::Button::selectable(
-                            selected,
-                            RichText::new(format!("{label} {count}"))
-                                .size(12.0)
-                                .color(if selected { ACCENT } else { MUTED }),
-                        )
-                        .corner_radius(8)
-                        .min_size(Vec2::new(0.0, 30.0)),
-                    )
-                    .clicked()
-                {
+                if tab_button(ui, &format!("{label} {count}"), selected).clicked() {
                     self.startup_filter = filter;
                 }
             }
@@ -2599,14 +2908,14 @@ impl App {
                 ui.label(RichText::new(if self.entries.is_empty() {"등록된 Run / 시작 폴더 항목이 없습니다. 다른 시작 앱은 Windows 설정에서 확인하세요."} else {"조건에 맞는 시작 앱이 없습니다. 필터나 검색어를 바꿔 보세요."}).color(MUTED));
             }
             let row_width=ui.available_width();
-            for entry in entries {
+            for (index, entry) in entries.into_iter().enumerate() {
                 ui.push_id(&entry.id,|ui| {
                     let (row,hover)=ui.allocate_exact_size(Vec2::new(row_width,66.0),Sense::hover());
                     let selected=self.details.as_deref()==Some(entry.id.as_str());
                     if selected {
                         ui.painter().rect_filled(row,6,PANEL);
                         ui.painter().rect_stroke(row,6,Stroke::new(1.0_f32,ACCENT),egui::StrokeKind::Inside);
-                    } else if hover.hovered() {ui.painter().rect_filled(row,6,PANEL.gamma_multiply(0.5));}
+                    } else if hover.hovered() || index % 2 == 0 {ui.painter().rect_filled(row,6,SURFACE);}
                     let name_width=(row_width-286.0).max(120.0);
                     let name_rect=Rect::from_min_size(row.min+Vec2::new(0.0,7.0),Vec2::new(name_width,52.0));
                     let mut name_ui=ui.new_child(egui::UiBuilder::new().max_rect(name_rect).layout(Layout::top_down(Align::LEFT)));
@@ -2640,8 +2949,8 @@ impl App {
             .cloned()
         {
             egui::Frame::new()
-                .fill(PANEL)
-                .stroke(Stroke::new(1.0_f32, LINE))
+                .fill(SURFACE)
+                .stroke(Stroke::new(1.0_f32, ACCENT.gamma_multiply(0.54)))
                 .inner_margin(if compact_details { 12 } else { 16 })
                 .corner_radius(12)
                 .show(ui, |ui| {
@@ -2669,8 +2978,15 @@ impl App {
                         .id_salt("details")
                         .max_height(if compact_details { 40.0 } else { 76.0 })
                         .show(ui, |ui| {
-                            ui.label(RichText::new("실행 명령").small().color(MUTED));
-                            ui.label(RichText::new(&entry.command).small());
+                            egui::Frame::new()
+                                .fill(NAV)
+                                .corner_radius(6)
+                                .inner_margin(8)
+                                .show(ui, |ui| {
+                                    ui.set_min_width(ui.available_width());
+                                    ui.label(RichText::new("실행 명령").small().color(MUTED));
+                                    ui.label(RichText::new(&entry.command).small());
+                                });
                             ui.label(RichText::new(&entry.detail).small().color(MUTED));
                         });
                 });

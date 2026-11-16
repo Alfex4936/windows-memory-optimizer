@@ -2,23 +2,28 @@
 name: Memori
 description: A measured native Windows memory and startup utility.
 colors:
-  background: "#111820"
-  navigation: "#0C1219"
-  control: "#1D2935"
-  control-hover: "#2B3D4C"
-  text: "#EDF2F7"
-  text-secondary: "#A7B8C9"
-  rule: "#31404F"
-  accent: "#7DE0D1"
+  background: "#13151B"
+  navigation: "#0D0F14"
+  surface: "#191C24"
+  control: "#222630"
+  control-hover: "#2C313D"
+  text: "#F4F5F8"
+  text-secondary: "#A5ADBF"
+  rule: "#353B4A"
+  accent: "#D2F780"
+  cpu: "#C5B5FF"
   caution: "#F0C17A"
   error: "#F29B9B"
 typography:
   display:
-    fontFamily: "Malgun Gothic, egui proportional fallback"
-    fontSize: "29px"
+    fontFamily: "egui monospace"
+    fontSize: "28px"
+  management-reading:
+    fontFamily: "egui monospace"
+    fontSize: "43px"
   compact-reading:
-    fontFamily: "Malgun Gothic, egui proportional fallback"
-    fontSize: "22px"
+    fontFamily: "egui monospace"
+    fontSize: "21px"
   title:
     fontFamily: "Malgun Gothic, egui proportional fallback"
     fontSize: "27px"
@@ -41,15 +46,15 @@ typography:
     fontFamily: "Malgun Gothic, egui proportional fallback"
     fontSize: "11px"
 rounded:
-  control: "2px"
-  control-hover: "3px"
+  control: "8px"
+  control-hover: "8px"
   notice: "6px"
   details: "12px"
   toolbar: "8px"
   compact-action: "11px"
-  widget-action: "12px"
-  widget-shell: "18px"
-  compact-shell: "24px"
+  widget-action: "9px"
+  widget-shell: "20px"
+  compact-shell: "19px"
 spacing:
   item-x: "10px"
   item-y: "8px"
@@ -60,7 +65,7 @@ spacing:
   field: "7px"
   inset: "12px"
   details-inset: "16px"
-  widget-inset: "22px"
+  widget-inset: "18px"
   content-x: "30px"
   content-y: "24px"
 components:
@@ -69,7 +74,7 @@ components:
     textColor: "{colors.navigation}"
     typography: "{typography.body}"
     rounded: "{rounded.widget-action}"
-    height: "42px"
+    height: "38px"
   button-compact-primary:
     backgroundColor: "{colors.accent}"
     textColor: "{colors.navigation}"
@@ -86,7 +91,7 @@ components:
     typography: "{typography.button}"
     rounded: "{rounded.control}"
     width: "200px"
-    height: "38px"
+    height: "36px"
   button-secondary:
     backgroundColor: "{colors.control}"
     textColor: "{colors.text}"
@@ -142,27 +147,27 @@ components:
     height: "30px"
   startup-badge:
     typography: "{typography.micro}"
-    rounded: "{rounded.widget-action}"
+    rounded: "12px"
     height: "24px"
   startup-switch-on:
     backgroundColor: "{colors.accent}"
     textColor: "{colors.navigation}"
-    rounded: "{rounded.widget-action}"
+    rounded: "12px"
     width: "44px"
     height: "24px"
   startup-switch-off:
     backgroundColor: "{colors.control}"
     textColor: "{colors.text-secondary}"
-    rounded: "{rounded.widget-action}"
+    rounded: "12px"
     width: "44px"
     height: "24px"
   startup-details:
-    backgroundColor: "{colors.control}"
+    backgroundColor: "{colors.surface}"
     textColor: "{colors.text}"
     rounded: "{rounded.details}"
     padding: "{spacing.details-inset}"
   startup-details-short:
-    backgroundColor: "{colors.control}"
+    backgroundColor: "{colors.surface}"
     textColor: "{colors.text}"
     rounded: "{rounded.details}"
     padding: "{spacing.inset}"
@@ -172,28 +177,22 @@ components:
 
 ## Overview
 
-**Creative North Star: "The Studio Mixing Console"**
-
-Memori is a quiet, ink-blue instrument: measured tracks, a cyan active channel, warm-white text, and explicit Korean controls. Density serves comparison. The desktop widget switches between a compact RAM rail and an expanded instrument, each keeping its reading and action inside one enclosed surface; the management window gives live history and aligned lists room to breathe.
-
-This is the implemented native Windows system, extracted from `src/ui.rs`, `src/main.rs`, and the related sorting/window/preferences modules. Base rendered references are `.impeccable/review/widget.png`, `desktop.png`, `startup.png`, and `compact.png`; current table references are `.impeccable/review/memory-0.1.2.png`, `memory-small-0.1.2.png`, `startup-0.1.2.png`, and `startup-small-0.1.2.png`. Measurements are egui logical points, represented as px in the portable token schema; Windows display scaling determines physical pixels. The implementation owns the appearance. The sidecar's HTML/CSS snippets are explanatory previews of native components.
-
-Direction history: the delegated workshop used seed `472e554f`, assigning candidate 6, the studio mixing console; the assignment was not evidence of a user preference. Candidates included the Windows performance console, laboratory bench meter, technical field notebook, broadcast monitor, camera settings panel, and railway control desk. The numerical clarity of the type specimen survived, along with fixed state cells, precise rules, efficient rows, alignment, and one real live plot from the other challengers. Their surface compositions were not adopted.
+Memori pairs graphite surfaces with lime for RAM and primary actions, and lavender for CPU. The widget puts current readings and manual trim within reach. The management window pairs memory history with an aligned process list and gives startup, storage cleanup, and power controls dedicated views.
 
 **Key Characteristics:**
 
 - Measured numerical readings and stable table tracks.
-- One cyan action channel against restrained dark surfaces.
+- Lime RAM and action indicators with a lavender CPU series.
 - Korean action labels, explicit state text, and local feedback.
 - A contained widget and a spacious, ruled management view.
 
 ## Colors
 
-Cool dark layers use one pale cyan accent; warm caution and error colors carry exceptional states. Values in the frontmatter are normative.
+Graphite layers support the lime RAM and action channel and the lavender CPU channel. Amber and coral carry exceptional states.
 
 ### Primary
 
-- **Active Cyan** (`accent`): primary trim actions, selected navigation label, available memory, history trace, meter availability, and successful feedback. Primary action text uses navigation ink.
+- **Lime** (`accent`): primary trim actions, selected navigation label, memory usage, history trace, used RAM meter segments, and successful feedback. Primary action text uses navigation ink.
 
 ### Secondary
 
@@ -202,27 +201,28 @@ Cool dark layers use one pale cyan accent; warm caution and error colors carry e
 
 ### Neutral
 
+- **Instrument Surface** (`surface`) fills signal panels and alternate rows.
 - **Instrument Ink** (`background`): central canvas and enclosed widget.
 - **Navigation Ink** (`navigation`): sidebar, status strip, and text fields.
 - **Raised Slate** (`control`): resting controls, selected navigation, notices, startup details, and selected toolbar toggle.
 - **Hover Slate** (`control-hover`): ordinary control hover fill.
 - **Warm White** (`text`): primary content.
 - **Quiet Blue Gray** (`text-secondary`): support copy, labels, and secondary state text.
-- **Track Rule** (`rule`): list tracks, plot guides, control borders, and used meter segments.
+- **Track Rule** (`rule`): list tracks, plot guides, control borders, and inactive meter segments.
 
-**The Signal Rule.** Pair state color with visible text or a named control. Cyan identifies an action or a measured value; it never promises permanent recovery.
+**The Signal Rule.** Pair state color with visible text or a named control. Lime identifies a measured value or an action. State labels describe what was measured or changed.
 
-Selection and plot fills derive from `accent.gamma_multiply(0.25)` and `accent.gamma_multiply(0.08)`. Preserve those native operations rather than treating their scalar as CSS opacity. Synthesized sidecar tonal ramps are inspection aids, not additional application colors.
+Selection uses `accent.gamma_multiply(0.25)`. Plot fill fades from 0.24 at the trace to 0.03 at the baseline.
 
 ## Typography
 
-**Display and Body Font:** Malgun Gothic, loaded from Windows when available; otherwise egui's proportional fallback. No external font download, separate display face, mono face, weight family, tracking, or fixed line height is configured.
+**Display and Body Font:** Malgun Gothic, loaded from Windows when available; otherwise egui's proportional fallback. Readings and the process table's numeric columns use egui's built-in monospace face.
 
 **Character:** readable Korean typography lets alignment and numerical scale supply distinction. Technical process names stay intact. `RichText::strong()` is egui's stronger-color treatment; it does not install a bold weight.
 
 ### Hierarchy
 
-- **Display** (`display`): widget available-memory reading.
+- **Display** (`display`) shows RAM and CPU in the expanded widget. The management reading is larger.
 - **Compact Reading** (`compact-reading`): RAM percentage in the compact rail.
 - **Title** (`title`): management page heading.
 - **Section** (`section`): process-list heading.
@@ -232,11 +232,11 @@ Selection and plot fills derive from `accent.gamma_multiply(0.25)` and `accent.g
 - **Label** (`label`): support text, table headers, and status.
 - **Micro** (`micro`): plot axes, widget feedback, and footer metadata.
 
-The same-family wordmark uses 20 in the widget and 22 in the sidebar; startup item names use 15. These are local sizes, not a ratio-based scale. The configured native Heading style is 24; explicit page/section sizes govern those surfaces.
+The same-family wordmark uses 21 in the widget and 22 in the sidebar; startup item names use 15. These are local sizes, not a ratio-based scale. The configured native Heading style is 24; explicit page/section sizes govern those surfaces.
 
 ## Layout
 
-The default window is an undecorated, non-resizable widget, restoring the saved compact/expanded mode and pin state. Without preferences it opens expanded and always on top. Shared `widget_size()` measurements are compact 248 × 82 and expanded 380 × 608. Both have a transparent outer margin (8) and fine enclosure. The compact rail uses inset 12, a RAM label/percentage drag region, a broom cleanup action, and an expand button. The expanded widget uses the widget inset token and keeps its readings, meter, main action, feedback, five-row CPU/RAM process list, and both management links enclosed. CPU and RAM headers sort independently of the management table until the full-process link transfers the selected order. Its painted logo/name are left-aligned, with collapse, pin, and close controls on the right.
+The default window is an undecorated, non-resizable widget, restoring the saved compact/expanded mode and pin state. Without preferences it opens expanded and always on top. Shared `widget_size()` measurements are compact 258 × 78 and expanded 376 × 566. Both have a transparent outer margin (5 compact, 6 expanded) and fine enclosure. The compact rail uses inset 12, a RAM label/percentage drag region, a broom cleanup action, and an expand button. The expanded widget uses the widget inset token and keeps its readings, meter, main action, feedback, five-row CPU/RAM process list, and three management links enclosed. CPU and RAM headers sort independently of the management table until the full-process link transfers the selected order. Its painted logo/name are left-aligned, with collapse, pin, and close controls on the right.
 
 Both header regions use native caption hit-testing (`WM_NCHITTEST` → `HTCAPTION`), scoped to this app window and removed when the drag-region owner is dropped. The expanded logo, painted wordmark, blank header, and its top/left inset form the drag region; collapse, pin, and close are excluded. Compact cleanup and expand controls are likewise excluded. The native hit-test area owns the Windows move cursor through WM_SETCURSOR, so the cursor hint follows the actual draggable area; the egui grab cursor is reserved for the native-registration fallback. A primary-button `StartDrag` request is only the fallback when native registration is unavailable. Widget labels do not select text; double-clicking the caption region does not maximize the widget.
 
@@ -248,22 +248,22 @@ Ordinary item gaps use the two item tokens. Expanded widget rows use the widget 
 
 **The Stable Tracks Rule.** Fix data and state columns; let the name column absorb remaining width. Text truncates inside its allocated cell rather than moving adjacent values.
 
-- Process rows: minimum height 34, flexible name, separate PID cell 72 right-aligned, CPU cell 76 right-aligned, working-set cell 100 right-aligned, and reason cell 140 left-aligned. Below available content width 720, the reason column disappears; selection, name, PID, CPU, and working set remain. This threshold concerns content width, not a mobile viewport.
+- Process rows use a minimum height of 32. The name flexes while PID, CPU, working set, and status share fixed tracks. Below 720 points of content width, the tracks narrow so each sort remains available.
 - Startup rows: fixed height 66, flexible name/source region, state column 130, and action column 136. Manageable entries use a small switch; other entries retain the Windows settings target (112 × 32).
 - Lists scroll vertically. Process search width is 200. Startup search uses 220, reducing to 160 when its remaining layout width is below 230. With details open, the startup list reserves 260 below it, reducing to 216 when remaining content height is below 360. Its minimum list height is 66 with details open and 100 otherwise; the closed-state reserve is 112. Startup row height stays 66 in either case. The details command region scrolls independently, bounded at 76 high or 40 in the shorter layout.
-- History height is 150, reducing to 105 when remaining content height is below 540. The time domain is 120 seconds and includes only samples collected during this run.
+- The chart uses a 112-point height or 90 in short windows. The time window grows from 15 to 30, 60, or 120 seconds as readings arrive.
 
 ## Elevation & Depth
 
 Tonal layering and fine borders provide depth. The application assigns no decorative shadows to the widget, sidebar, notices, details, or lists. Native window chrome and egui tooltips retain framework behavior; these are not an application elevation scale.
 
-Plot guides use light rules (0.7); list tracks are finer (0.5). Inactive control borders are 1; hovered/focused borders use cyan at 1; active borders use cyan at 1.5. The history line is 2, with endpoint radius 3.5. Strokes establish hierarchy without gradients or glow.
+Plot guides use light rules (0.7); list tracks are finer (0.5). Inactive control borders are 1; hovered/focused borders use lime at 1; active borders use lime at 1.5. The history line is 2, with endpoint radius 3.5. The area below the measured history uses a subtle lime fade.
 
 ## Shapes
 
-Ordinary controls inherit egui 0.33.3's restrained control and hover radii. Notices use the notice radius; startup details use their separate, softer details radius. Widget toolbar controls use the toolbar radius; the compact cyan cleanup target uses the compact-action radius; the expanded primary action uses the widget-action radius. Expanded and compact enclosures use their distinct shell tokens, giving the compact rail a softer capsule silhouette. The management trim action keeps the native control shape.
+Ordinary controls use an eight-point radius. Notices use the notice radius; startup details use their separate, softer details radius. Widget toolbar controls use the toolbar radius; the compact lime cleanup target uses the compact-action radius; the expanded primary action uses the widget-action radius. Expanded and compact enclosures use their distinct shell tokens, giving the compact rail a softer capsule silhouette. The expanded widget and management trim buttons share the primary action radius.
 
-The three-bar mark is drawn geometry, not a font glyph: cyan tracks with small rounded ends. The meter repeats forty segments (height 18, gap 3, radius 1.5). Used segments take the rule tone; available segments take cyan. Keep this instrument geometry distinct from buttons.
+The three-bar mark uses dark rounded bars in a lime tile. Meters light from left to right as use grows, with 15 segments in compact mode, 20 for each expanded reading, and 24 for each drive.
 
 ## Components
 
@@ -271,19 +271,19 @@ The three-bar mark is drawn geometry, not a font glyph: cyan tracks with small r
 
 The full-width widget action uses widget-primary tokens and the label “메모리 정리.” The management primary action uses its own minimum width/height and a selection-count label. A minimum target size is not a maximum.
 
-The compact rail uses an icon-only cyan broom target with the compact-primary tokens. Its accessible name and tooltip state the trim action, eligible-app count, and temporary effect. It follows the expanded action's eligibility, busy, and stale-data disabling rules. A positive trimmed-app count replaces the broom with a check for two seconds; this is brief result feedback, not a persistent health score.
+The compact rail uses an icon-only lime broom target with the compact-primary tokens. Its accessible name and tooltip state the trim action, eligible-app count, and temporary effect. It follows the expanded action's eligibility, busy, and stale-data disabling rules. A positive trimmed-app count replaces the broom with a check for two seconds; this is brief result feedback, not a persistent health score.
 
-Secondary actions use secondary tokens and a rule border; hover uses the hover variant and cyan outline. Keyboard focus uses egui's highlighted state. Pressed controls retain the native active visual and stronger cyan border. Disabled actions use the framework's disabled treatment.
+Secondary actions use secondary tokens and a rule border; hover uses the hover variant and lime outline. Keyboard focus uses egui's highlighted state. Pressed controls retain the native active visual and stronger lime border. Disabled actions use the framework's disabled treatment.
 
-Busy actions say “정리 중…”. Widget trimming is disabled with no eligible targets, an active trim, or stale data. Management trimming requires selection. Unframed management links keep visible Korean labels.
+Busy actions say “정리 중…”. Widget trimming is disabled with no eligible targets, an active trim, or stale data. Management trimming requires selection. The expanded widget has three evenly sized buttons for process, startup, and optimization management.
 
 ### Navigation
 
-Two labeled sidebar rows use a raised surface and cyan text when selected; unselected rows use navigation ink and secondary text. Changing page clears the prior search/detail selection. No mobile drawer is implemented.
+Three labeled sidebar rows use a raised surface and lime indicator when selected. Changing page clears the prior search and detail selection. The optimization page has separate tabs for storage cleanup and power management.
 
 ### Inputs / Fields
 
-Single-line search uses navigation ink, rule border, field inset, and proportional body type. Its hint identifies process name/PID or startup apps. Focus uses the native cyan border. Empty results show an explanation and a next step.
+Single-line search uses navigation ink, rule border, field inset, and proportional body type. Its hint identifies process name/PID or startup apps. Focus uses the native lime border. Empty results show an explanation and a next step.
 
 ### Cards / Containers
 
@@ -297,7 +297,7 @@ The expanded toolbar contains named collapse, always-on-top, and close controls 
 
 ### Sortable process table
 
-Each name, PID, working-set, and reason header is a sort button with minimum height 30. Active headers use a control-tone fill, notice rounding, and cyan text; hover/focus also reveals the fill, with a cyan focus border. Painted triangles show one active ascending/descending direction, or two quiet indicators for an inactive column. The accessible header name includes the column, current direction, and sorting action. A text summary above the table repeats the criterion and direction.
+Each name, PID, CPU, working-set, and status header is a sort button with minimum height 30. Active headers use a control-tone fill, notice rounding, and lime text; hover/focus also reveals the fill, with a lime focus border. Painted triangles show one active ascending/descending direction, or two quiet indicators for an inactive column. The accessible header name includes the column, current direction, and sorting action. A text summary above the table repeats the criterion and direction.
 
 The initial order is working set descending. Repeatedly selecting the same column reverses direction; switching to memory starts descending, while name, PID, and status start ascending. PID and working set use numeric values, names compare without case, and status groups eligibility/reason. Equal values resolve by PID and process creation time so refresh does not shuffle ties. Sorting survives refresh within the session and is not stored across app restarts.
 
@@ -311,17 +311,17 @@ The compact rail shows current RAM percentage rather than a compressed plot. Its
 
 ### Startup rows
 
-Names toggle source/command details. A soft badge pairs a small dot (radius 2.5) with explicit text: cyan “켜짐,” quiet “꺼짐 · 보관됨” / “꺼짐 · Windows,” or caution “확인 필요.” The badge is 24 high with radius 12, micro type, and a state-color fill derived with `gamma_multiply(0.12)`. Its accessible label names automatic execution and the state. Unselected off-state item names use secondary text. A hovered row uses a notice-rounded control fill derived with `gamma_multiply(0.5)`; fixed row rectangles keep neighboring columns aligned. The selected row uses the full control fill, a cyan outline (1), and primary name text, with selected/open-or-close semantics exposed by its name button.
+Names toggle source/command details. A soft badge pairs a small dot (radius 2.5) with explicit text: lime “켜짐,” quiet “꺼짐 · 보관됨” / “꺼짐 · Windows,” or caution “확인 필요.” The badge is 24 high with radius 12, micro type, and a state-color fill derived with `gamma_multiply(0.12)`. Its accessible label names automatic execution and the state. Unselected off-state item names use secondary text. Alternate and hovered rows use the instrument surface. Fixed row rectangles keep columns aligned. The selected row uses the full control fill, a lime outline (1), and primary name text, with selected/open-or-close semantics exposed by its name button.
 
-Manageable entries use a labeled accessible switch: cyan track with a navigation-tone thumb on the right when on, control-tone track with a secondary-text thumb on the left when off. The minimum requested size is 44 × 24; inherited interaction sizing can increase its height to 28. The thumb radius is 8; focus has a cyan outline around the switch. Tooltips describe disabling with original preservation or enabling by restoration. Other entries retain “Windows 설정.” Busy startup mutations disable their controls.
+Manageable entries use a labeled accessible switch: lime track with a navigation-tone thumb on the right when on, control-tone track with a secondary-text thumb on the left when off. The minimum requested size is 44 × 24; inherited interaction sizing can increase its height to 28. The thumb radius is 8; focus has a lime outline around the switch. Tooltips describe disabling with original preservation or enabling by restoration. Other entries retain “Windows 설정.” Busy startup mutations disable their controls.
 
-Counted filters “전체,” “켜짐,” “꺼짐,” and “확인 필요” combine with search. The off filter includes both Memori-preserved and Windows-disabled states. The selected filter uses cyan label text, toolbar rounding, and a minimum height of 30. State/action tracks stay fixed while names truncate; an empty filtered result explains how to change the filter or query.
+Counted filters “전체,” “켜짐,” “꺼짐,” and “확인 필요” combine with search. The off filter includes both Memori-preserved and Windows-disabled states. The selected filter uses lime label text, toolbar rounding, and a minimum height of 32. State/action tracks stay fixed while names truncate; an empty filtered result explains how to change the filter or query.
 
-The startup screen also has a labeled checkbox, “Windows 로그인 시 Memori 위젯 자동 실행.” It manages only this executable's `Memori` entry in the current-user Run key, using the quoted executable path followed by `--widget`. Its checked state reports this registration; Windows can independently block startup. Keep this explicit Memori preference separate from the other applications' row actions.
+The startup screen also has a labeled switch, “로그인 시 Memori 위젯 열기.” It manages only this executable's `Memori` entry in the current-user Run key, using the quoted executable path followed by `--widget`. Its checked state reports this registration; Windows can independently block startup. Keep this explicit Memori preference separate from the other applications' row actions.
 
 ### Startup details
 
-The details panel spans the content width with a raised control fill, rule border (1), details rounding, and details inset. The shorter layout uses the ordinary inset instead. A visible “상세 정보” heading uses summary type; a standard “닫기” button exposes the accessible name “상세 정보 닫기.” The selected application's body-sized name stays on one truncated line with its full name available on hover. A labeled “실행 명령” region contains the command and management explanation inside the bounded scroll area.
+The details panel spans the content width with an instrument surface, lime border, details rounding, and details inset. The shorter layout uses the ordinary inset instead. A visible “상세 정보” heading uses summary type; a standard “닫기” button exposes the accessible name “상세 정보 닫기.” The selected application's body-sized name stays on one truncated line with its full name available on hover. The “실행 명령” area has a recessed fill, followed by the management explanation in a bounded scroll area.
 
 Clicking the same entry again, the close button, or Escape in the full startup view closes details. Closing clears the selected entry and returns the reserved space to the list. Escape handling is limited to the startup management view; widget caption, mode, pin, and position behavior remain independent.
 

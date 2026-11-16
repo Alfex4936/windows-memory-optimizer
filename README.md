@@ -21,13 +21,13 @@
 
 1. [Releases](https://github.com/Alfex4936/windows-memory-optimizer/releases/latest)에서 Windows x64 ZIP을 받습니다.
 2. 계속 사용할 폴더에 압축을 풀고 `memori.exe`를 실행합니다.
-3. 필요하면 **시작 프로그램 → Windows 로그인 시 Memori 위젯 자동 실행**을 켭니다.
+3. 필요하면 **시작 프로그램 → 로그인 시 Memori 위젯 열기**를 켭니다.
 
 설치 프로그램이나 라이선스 키가 필요하지 않습니다. 현재 계정의 지원되는 항목은 관리자 권한 없이 관리합니다.
 
 | 컴팩트 모드 | 펼친 위젯 |
 |:---:|:---:|
-| <img src="assets/screenshots/compact.png" width="248" alt="RAM 사용률과 정리·펼치기 버튼을 표시하는 컴팩트 위젯"> | <img src="assets/screenshots/widget.png" width="320" alt="여유 메모리와 메모리 셀, 정리 버튼을 표시하는 펼친 위젯"> |
+| <img src="assets/screenshots/compact.png" width="258" alt="RAM 사용률과 정리·펼치기 버튼을 표시하는 컴팩트 위젯"> | <img src="assets/screenshots/widget.png" width="320" alt="RAM·CPU 사용률과 프로세스 목록을 표시하는 펼친 위젯"> |
 
 ## 필요한 기능만
 

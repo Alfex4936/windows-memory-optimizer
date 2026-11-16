@@ -45,4 +45,4 @@ Windows users who want focused RAM monitoring, manual working-set trimming, and 
 
 ## Brand
 
-Memori: restrained ink-blue surfaces, mint instruments and actions, clear Korean labels, and a three-bar memory mark. Keep native keyboard and accessibility behavior.
+Memori uses graphite surfaces, lime for RAM and primary actions, lavender for CPU, and a three-bar mark. Korean labels and keyboard controls make every action explicit.
