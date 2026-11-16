@@ -2727,7 +2727,7 @@ impl App {
                 })
             })
             .collect();
-        if points.len() >= 2 {
+        if points.len() >= 3 {
             // A mesh avoids treating a non-convex history as a convex polygon.
             let mut mesh = egui::Mesh::default();
             for pair in points.windows(2) {
@@ -2745,13 +2745,10 @@ impl App {
                 mesh.add_triangle(start, start + 2, start + 3);
             }
             painter.add(egui::Shape::mesh(mesh));
-            painter.add(egui::Shape::line(
-                points.clone(),
-                Stroke::new(2.0_f32, ACCENT),
-            ));
-        }
-        if let Some(p) = points.last() {
-            painter.circle_filled(*p, 3.5, ACCENT);
+            if let Some(p) = points.last() {
+                painter.circle_filled(*p, 3.5, ACCENT);
+            }
+            painter.add(egui::Shape::line(points, Stroke::new(2.0_f32, ACCENT)));
         }
         painter.text(
             Pos2::new(plot.left(), rect.bottom()),
