@@ -228,6 +228,8 @@ pub struct App {
     search: String,
     process_sort: ProcessSort,
     widget_sort: ProcessSort,
+    widget_cpu: bool,
+    widget_cpu_search: String,
     startup_filter: StartupFilter,
     busy: bool,
     startup_busy: bool,
@@ -846,6 +848,8 @@ impl App {
             search: String::new(),
             process_sort: ProcessSort::default(),
             widget_sort: ProcessSort::default(),
+            widget_cpu: false,
+            widget_cpu_search: String::new(),
             startup_filter: StartupFilter::All,
             busy: false,
             startup_busy: page == Page::Startup,
@@ -1399,8 +1403,38 @@ impl App {
                 )
                 .on_hover_text(feedback);
                 ui.add_space(9.0);
-                self.widget_processes(ui, &s);
-                ui.add_space(3.0);
+                ui.horizontal(|ui| {
+                    for (cpu, label) in [(false, "프로세스"), (true, "CPU 최적화")] {
+                        let selected = self.widget_cpu == cpu;
+                        if ui
+                            .add(
+                                egui::Button::selectable(selected, RichText::new(label).size(12.0))
+                                    .small()
+                                    .min_size(Vec2::new(0.0, 24.0))
+                                    .corner_radius(6),
+                            )
+                            .clicked()
+                        {
+                            self.widget_cpu = cpu;
+                        }
+                    }
+                    ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
+                        let order = if self.widget_cpu {
+                            "CPU 높은 순"
+                        } else if self.widget_sort.descending {
+                            "상위 5개 · 내 계정"
+                        } else {
+                            "하위 5개 · 내 계정"
+                        };
+                        ui.label(RichText::new(order).size(11.0).color(MUTED));
+                    });
+                });
+                if self.widget_cpu {
+                    self.cpu_controls(ui, true);
+                } else {
+                    self.widget_processes(ui, &s);
+                }
+                ui.add_space((ui.available_height() - 44.0).max(3.0));
                 ui.separator();
                 ui.horizontal(|ui| {
                     let width = (ui.available_width() - 2.0 * ui.spacing().item_spacing.x) / 3.0;
@@ -1479,20 +1513,6 @@ impl App {
     }
 
     fn widget_processes(&mut self, ui: &mut egui::Ui, snapshot: &Snapshot) {
-        ui.horizontal(|ui| {
-            ui.label(RichText::new("프로세스").size(16.0).strong());
-            ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
-                ui.label(
-                    RichText::new(if self.widget_sort.descending {
-                        "상위 5개 · 내 계정"
-                    } else {
-                        "하위 5개 · 내 계정"
-                    })
-                    .size(11.0)
-                    .color(MUTED),
-                );
-            });
-        });
         let name_width = (ui.available_width() - 156.0).max(80.0);
         ui.horizontal(|ui| {
             cell(
@@ -1693,7 +1713,7 @@ impl App {
                     OptimizationTab::Cpu => {
                         surface().show(ui, |ui| {
                             ui.set_min_width(width - 34.0);
-                            self.cpu_controls(ui);
+                            self.cpu_controls(ui, false);
                         });
                     }
                 }
@@ -2082,33 +2102,51 @@ impl App {
         }
     }
 
-    fn cpu_controls(&mut self, ui: &mut egui::Ui) {
-        ui.horizontal(|ui| {
-            ui.label(RichText::new("앱별 CPU 사용량").size(19.0).strong());
-            ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
-                let usage = self.snapshot.as_ref().and_then(|s| s.cpu_percent);
-                ui.label(RichText::new(format!("전체 CPU {}", cpu_usage(usage))).color(CPU))
-                    .on_hover_text(CPU_HELP);
+    fn cpu_controls(&mut self, ui: &mut egui::Ui, in_widget: bool) {
+        if !in_widget {
+            ui.horizontal(|ui| {
+                ui.label(RichText::new("앱별 CPU 사용량").size(19.0).strong());
+                ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
+                    let usage = self.snapshot.as_ref().and_then(|s| s.cpu_percent);
+                    ui.label(RichText::new(format!("전체 CPU {}", cpu_usage(usage))).color(CPU))
+                        .on_hover_text(CPU_HELP);
+                });
             });
-        });
+        }
+        let search = if in_widget {
+            &mut self.widget_cpu_search
+        } else {
+            &mut self.search
+        };
         ui.horizontal_wrapped(|ui| {
             ui.add(
-                egui::TextEdit::singleline(&mut self.search)
+                egui::TextEdit::singleline(search)
                     .hint_text("앱 이름 또는 PID 검색")
-                    .desired_width(235.0)
-                    .margin(Vec2::splat(7.0)),
+                    .desired_width(if in_widget {
+                        ui.available_width() - 12.0
+                    } else {
+                        235.0
+                    })
+                    .margin(Vec2::splat(if in_widget { 5.0 } else { 7.0 })),
             );
-            ui.checkbox(&mut self.cpu_candidates_only, "백그라운드 후보만")
-                .on_hover_text("시스템 구성 요소, Memori, 현재 사용 중인 앱을 제외합니다.");
+            if !in_widget {
+                ui.checkbox(&mut self.cpu_candidates_only, "백그라운드 후보만")
+                    .on_hover_text("시스템 구성 요소, Memori, 현재 사용 중인 앱을 제외합니다.");
+            }
         });
-        let query = self.search.to_lowercase();
+        let query = search.trim().to_lowercase();
+        let candidates_only = if in_widget {
+            query.is_empty()
+        } else {
+            self.cpu_candidates_only
+        };
         let foreground = memory::protected_foreground_pid();
         let protected = |p: &Process| memory::blocked_reason(p.pid, &p.name, &p.path, foreground);
         let mut rows: Vec<_> = self
             .snapshot
             .iter()
             .flat_map(|s| &s.processes)
-            .filter(|p| !self.cpu_candidates_only || protected(p).is_none())
+            .filter(|p| !candidates_only || protected(p).is_none())
             .filter(|p| {
                 p.name.to_lowercase().contains(&query) || p.pid.to_string().contains(&query)
             })
@@ -2119,13 +2157,16 @@ impl App {
         }
         .sort(&mut rows);
         let mut picked = None;
-        let row_height = (ui.text_style_height(&egui::TextStyle::Button)
-            + 2.0 * ui.spacing().button_padding.y)
-            .max(29.0);
+        let row_height = if in_widget {
+            24.0
+        } else {
+            (ui.text_style_height(&egui::TextStyle::Button) + 2.0 * ui.spacing().button_padding.y)
+                .max(29.0)
+        };
         if rows.is_empty() {
             ui.label(
                 RichText::new(if self.snapshot.is_some() {
-                    "일치하는 앱이 없습니다. 검색어나 후보 필터를 바꿔 보세요."
+                    "일치하는 앱이 없습니다."
                 } else {
                     "프로세스 목록을 읽고 있습니다…"
                 })
@@ -2134,26 +2175,31 @@ impl App {
         }
         egui::ScrollArea::vertical()
             .id_salt("cpu-apps")
-            .max_height(174.0)
+            .max_height(if in_widget { 86.0 } else { 174.0 })
             .auto_shrink([false, true])
             .show_rows(ui, row_height, rows.len(), |ui, range| {
                 for process in &rows[range] {
                     let id = (process.pid, process.created);
-                    let label = format!(
-                        "{}   ·   PID {}   ·   CPU {}",
-                        process.name,
-                        process.pid,
-                        cpu_usage(process.cpu_percent)
-                    );
+                    let usage = cpu_usage(process.cpu_percent);
+                    let label = if in_widget {
+                        format!("{usage}  ·  {}  ·  PID {}", process.name, process.pid)
+                    } else {
+                        format!(
+                            "{}   ·   PID {}   ·   CPU {usage}",
+                            process.name, process.pid
+                        )
+                    };
                     ui.push_id(id, |ui| {
+                        let row = egui::Button::selectable(self.cpu_target == Some(id), label)
+                            .min_size(Vec2::new(ui.available_width(), row_height))
+                            .truncate();
+                        let row = if in_widget { row.small() } else { row };
                         if ui
-                            .add_enabled(
-                                !self.cpu_busy && !self.busy,
-                                egui::Button::selectable(self.cpu_target == Some(id), label)
-                                    .min_size(Vec2::new(ui.available_width(), row_height))
-                                    .truncate(),
-                            )
-                            .on_hover_text(&process.path)
+                            .add_enabled(!self.cpu_busy && !self.busy, row)
+                            .on_hover_text(format!(
+                                "{} · PID {} · CPU {usage}\n{}",
+                                process.name, process.pid, process.path
+                            ))
                             .clicked()
                         {
                             picked = Some((*process).clone());
@@ -2174,9 +2220,13 @@ impl App {
         });
         let mut cpu_command = None;
         if let Some(process) = target {
-            ui.separator();
+            if !in_widget {
+                ui.separator();
+            }
             ui.horizontal(|ui| {
-                ui.label(RichText::new(format!("{} · {}", process.name, process.pid)).strong());
+                let name = format!("{} · PID {}", process.name, process.pid);
+                ui.add(egui::Label::new(RichText::new(&name).strong()).truncate())
+                    .on_hover_text(name);
                 if let Some(reason) = protected(process) {
                     ui.label(RichText::new(reason).size(12.0).color(WARN));
                 }
@@ -2198,59 +2248,77 @@ impl App {
                         };
                         ui.label(RichText::new(state).color(MUTED));
                         if let Some((label, enabled)) = action
-                            && ui.add_enabled(enabled, egui::Button::new(label)).clicked()
+                            && ui
+                                .add_enabled(enabled, egui::Button::new(label))
+                                .on_hover_text(
+                                    protected(process)
+                                        .unwrap_or("CPU가 바쁠 때의 실행 우선순위를 변경합니다."),
+                                )
+                                .clicked()
                         {
                             cpu_command =
                                 Some(Command::ToggleCpuPriority(process.clone(), *priority));
                         }
                     }
                     Err(error) => {
-                        ui.label(RichText::new(error).color(WARN));
+                        ui.add(egui::Label::new(RichText::new(error).color(WARN)).truncate())
+                            .on_hover_text(error);
                     }
                 });
-                ui.horizontal_wrapped(|ui| match &settings.power {
-                    Ok(policy) => {
-                        let state = match policy {
-                            PowerPolicy::Automatic => "Windows 자동 관리",
-                            PowerPolicy::Eco => "절전 우선 적용 중",
-                            PowerPolicy::Performance => "절전 제한 해제 상태",
-                        };
-                        ui.label(RichText::new(state).color(if *policy == PowerPolicy::Eco {
-                            ACCENT
-                        } else {
-                            MUTED
-                        }));
-                        for (desired, label) in [
-                            (PowerPolicy::Eco, "절전 우선 적용"),
-                            (PowerPolicy::Automatic, "Windows 자동 관리로 전환"),
-                        ] {
-                            if ui
-                                .add_enabled(
-                                    !self.busy
-                                        && *policy != desired
-                                        && (desired != PowerPolicy::Eco || can_lower),
-                                    egui::Button::new(label),
-                                )
-                                .clicked()
-                            {
-                                cpu_command =
-                                    Some(Command::SetPower(process.clone(), *policy, desired));
+                if !in_widget {
+                    ui.horizontal_wrapped(|ui| match &settings.power {
+                        Ok(policy) => {
+                            let state = match policy {
+                                PowerPolicy::Automatic => "Windows 자동 관리",
+                                PowerPolicy::Eco => "절전 우선 적용 중",
+                                PowerPolicy::Performance => "절전 제한 해제 상태",
+                            };
+                            ui.label(RichText::new(state).color(if *policy == PowerPolicy::Eco {
+                                ACCENT
+                            } else {
+                                MUTED
+                            }));
+                            for (desired, label) in [
+                                (PowerPolicy::Eco, "절전 우선 적용"),
+                                (PowerPolicy::Automatic, "Windows 자동 관리로 전환"),
+                            ] {
+                                if ui
+                                    .add_enabled(
+                                        !self.busy
+                                            && *policy != desired
+                                            && (desired != PowerPolicy::Eco || can_lower),
+                                        egui::Button::new(label),
+                                    )
+                                    .clicked()
+                                {
+                                    cpu_command =
+                                        Some(Command::SetPower(process.clone(), *policy, desired));
+                                }
                             }
                         }
-                    }
-                    Err(error) => {
-                        ui.label(RichText::new(error).color(WARN));
-                    }
-                });
+                        Err(error) => {
+                            ui.label(RichText::new(error).color(WARN));
+                        }
+                    });
+                }
             } else if let Some(Err(error)) = self.cpu_settings.as_ref() {
-                ui.label(RichText::new(error).color(WARN));
+                ui.horizontal(|ui| {
+                    if ui
+                        .add_enabled(!self.busy, egui::Button::new("다시 확인"))
+                        .clicked()
+                    {
+                        cpu_command = Some(Command::ReadCpu(process.clone()));
+                    }
+                    ui.add(egui::Label::new(RichText::new(error).color(WARN)).truncate())
+                        .on_hover_text(error);
+                });
             }
         } else {
             ui.label(
                 RichText::new(if self.cpu_target.is_some() {
                     "선택한 앱이 종료되었습니다. 다른 앱을 선택하세요."
                 } else {
-                    "CPU 사용량이 높은 순서입니다. 조절할 앱을 선택하세요."
+                    "조절할 앱을 선택하세요."
                 })
                 .color(MUTED),
             );
@@ -2259,13 +2327,15 @@ impl App {
             self.cpu_busy = true;
             self.send(command);
         }
-        ui.label(
-            RichText::new(
-                "우선순위를 낮추면 CPU가 바쁠 때 다른 앱에 실행 기회를 먼저 줍니다. 설정은 프로세스 종료 시 끝납니다.",
-            )
-            .small()
-            .color(MUTED),
-        );
+        if !in_widget {
+            ui.label(
+                RichText::new(
+                    "우선순위를 낮추면 CPU가 바쁠 때 다른 앱에 실행 기회를 먼저 줍니다. 설정은 프로세스 종료 시 끝납니다.",
+                )
+                .small()
+                .color(MUTED),
+            );
+        }
     }
 
     fn storage_controls(&mut self, ui: &mut egui::Ui) {
