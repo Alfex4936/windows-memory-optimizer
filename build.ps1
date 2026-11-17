@@ -21,7 +21,7 @@ try {
     $screenshotPath = Join-Path $assetPath 'screenshots'
     $docsPath = Join-Path $packagePath 'docs'
     New-Item -ItemType Directory -Path $screenshotPath, $docsPath -Force | Out-Null
-    Copy-Item -LiteralPath 'assets\icon.svg' -Destination $assetPath
+    Copy-Item -LiteralPath 'assets\icon.png' -Destination $assetPath
     Copy-Item -LiteralPath 'assets\screenshots\compact.png', 'assets\screenshots\widget.png' -Destination $screenshotPath
     Copy-Item -LiteralPath 'docs\usage.md' -Destination $docsPath
     python scripts\bundle_notices.py

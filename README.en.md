@@ -1,4 +1,4 @@
-<p align="center"><img src="assets/icon.svg" width="88" height="88" alt="Memori icon"></p>
+<p align="center"><img src="assets/icon.png" width="88" height="88" alt="Memori icon"></p>
 <h1 align="center">Memori</h1>
 <p align="center">A small Windows widget for RAM usage and login startup apps.</p>
 <p align="center">Windows 10/11 · x64 · Rust · MIT</p>

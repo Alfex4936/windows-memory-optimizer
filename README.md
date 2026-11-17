@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="assets/icon.svg" width="88" height="88" alt="Memori 아이콘">
+  <img src="assets/icon.png" width="88" height="88" alt="Memori 아이콘">
 </p>
 
 <h1 align="center">Memori</h1>

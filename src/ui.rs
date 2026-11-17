@@ -203,6 +203,7 @@ impl CleanupReview {
 }
 
 pub struct App {
+    logo: egui::TextureHandle,
     preferences: Preferences,
     saved_preferences: Preferences,
     pending_position: Option<[i32; 2]>,
@@ -299,24 +300,6 @@ fn primary(text: impl Into<String>) -> egui::Button<'static> {
         .stroke(Stroke::NONE)
         .corner_radius(9)
         .min_size(Vec2::new(0.0, 36.0))
-}
-
-fn mark(painter: &egui::Painter, center: Pos2, size: f32) {
-    painter.rect_filled(
-        Rect::from_center_size(center, Vec2::splat(size)),
-        size * 0.27,
-        ACCENT,
-    );
-    for (offset, height) in [(-0.19, 0.25), (0.0, 0.54), (0.19, 0.39)] {
-        painter.rect_filled(
-            Rect::from_min_size(
-                center + Vec2::new((offset - 0.045) * size, (0.28 - height) * size),
-                Vec2::new(0.09 * size, height * size),
-            ),
-            1.5,
-            NAV,
-        );
-    }
 }
 
 fn meter(painter: &egui::Painter, rect: Rect, percent: f32, segments: usize, color: Color32) {
@@ -704,8 +687,17 @@ impl App {
         cc: &eframe::CreationContext<'_>,
         preferences: Preferences,
         load_error: Option<String>,
+        icon: &egui::IconData,
     ) -> Self {
         let ctx = &cc.egui_ctx;
+        let logo = ctx.load_texture(
+            "Memori icon",
+            egui::ColorImage::from_rgba_unmultiplied(
+                [icon.width as usize, icon.height as usize],
+                &icon.rgba,
+            ),
+            egui::TextureOptions::LINEAR.with_mipmap_mode(Some(egui::TextureFilter::Linear)),
+        );
         let mut fonts = egui::FontDefinitions::default();
         let font_path = std::env::var("WINDIR").unwrap_or_else(|_| "C:\\Windows".into())
             + "\\Fonts\\malgun.ttf";
@@ -819,6 +811,7 @@ impl App {
             None
         };
         Self {
+            logo,
             pinned: preferences.pinned,
             saved_preferences: preferences.clone(),
             preferences,
@@ -1140,6 +1133,15 @@ impl App {
         }
     }
 
+    fn paint_logo(&self, painter: &egui::Painter, center: Pos2, size: f32) {
+        painter.image(
+            self.logo.id(),
+            Rect::from_center_size(center, Vec2::splat(size)),
+            Rect::from_min_max(Pos2::ZERO, Pos2::new(1.0, 1.0)),
+            Color32::WHITE,
+        );
+    }
+
     fn compact_widget(&mut self, ctx: &egui::Context) {
         egui::CentralPanel::default()
             .frame(
@@ -1169,7 +1171,7 @@ impl App {
                         .as_ref()
                         .map_or("…".into(), |s| format!("{:.0}%", s.percent() * 100.0));
                     let painter = ui.painter();
-                    mark(
+                    self.paint_logo(
                         painter,
                         Pos2::new(header.left() + 15.0, header.center().y),
                         30.0,
@@ -1292,7 +1294,7 @@ impl App {
                     drag.widget_info(|| {
                         egui::WidgetInfo::labeled(egui::WidgetType::Other, true, "위젯 이동 영역")
                     });
-                    mark(
+                    self.paint_logo(
                         ui.painter(),
                         Pos2::new(header.left() + 14.0, header.center().y),
                         28.0,
@@ -1592,7 +1594,7 @@ impl App {
             .show(ctx, |ui| {
                 ui.horizontal(|ui| {
                     let (rect, _) = ui.allocate_exact_size(Vec2::splat(26.0), Sense::hover());
-                    mark(ui.painter(), rect.center(), 26.0);
+                    self.paint_logo(ui.painter(), rect.center(), 26.0);
                     ui.label(RichText::new("memori").size(22.0).strong());
                 });
                 ui.add_space(31.0);
@@ -2779,7 +2781,7 @@ impl App {
         surface().inner_margin(13).show(ui, |ui| {
             ui.horizontal(|ui| {
                 let (logo, _) = ui.allocate_exact_size(Vec2::splat(36.0), Sense::hover());
-                mark(ui.painter(), logo.center(), 36.0);
+                self.paint_logo(ui.painter(), logo.center(), 36.0);
                 ui.vertical(|ui| {
                     ui.spacing_mut().item_spacing.y = 2.0;
                     ui.label(RichText::new("로그인 시 Memori 위젯 열기").strong());

@@ -45,4 +45,4 @@ Windows users who want focused RAM monitoring, manual working-set trimming, and 
 
 ## Brand
 
-Memori uses graphite surfaces, lime for RAM and primary actions, lavender for CPU, and a three-bar mark. Korean labels and keyboard controls make every action explicit.
+Memori uses graphite surfaces, lime for RAM and primary actions, and lavender for CPU. The icon is a folded lime monogram with a lavender inset. Korean labels and keyboard controls make every action explicit.

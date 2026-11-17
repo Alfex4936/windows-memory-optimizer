@@ -35,11 +35,13 @@ fn main() -> eframe::Result {
     let _ = memory::protected_foreground_pid();
     let widget = ui::starts_as_widget();
     let small_window = args.iter().any(|a| a == "--small-window");
-    let icon = eframe::icon_data::from_png_bytes(include_bytes!("../assets/icon.png"))
-        .expect("Embedded Memori icon must be a valid PNG");
+    let icon = std::sync::Arc::new(
+        eframe::icon_data::from_png_bytes(include_bytes!("../assets/icon.png"))
+            .expect("Embedded Memori icon must be a valid PNG"),
+    );
     let options = eframe::NativeOptions {
         viewport: eframe::egui::ViewportBuilder::default()
-            .with_icon(icon)
+            .with_icon(icon.clone())
             .with_inner_size(if widget {
                 ui::widget_size(preferences.compact).into()
             } else if small_window {
@@ -66,6 +68,6 @@ fn main() -> eframe::Result {
     eframe::run_native(
         "Memori",
         options,
-        Box::new(move |cc| Ok(Box::new(ui::App::new(cc, preferences, load_error)))),
+        Box::new(move |cc| Ok(Box::new(ui::App::new(cc, preferences, load_error, &icon)))),
     )
 }

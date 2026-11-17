@@ -263,7 +263,7 @@ Plot guides use light rules (0.7); list tracks are finer (0.5). Inactive control
 
 Ordinary controls use an eight-point radius. Notices use the notice radius; startup details use their separate, softer details radius. Widget toolbar controls use the toolbar radius; the compact lime cleanup target uses the compact-action radius; the expanded primary action uses the widget-action radius. Expanded and compact enclosures use their distinct shell tokens, giving the compact rail a softer capsule silhouette. The expanded widget and management trim buttons share the primary action radius.
 
-The three-bar mark uses dark rounded bars in a lime tile. Meters light from left to right as use grows, with 15 segments in compact mode, 20 for each expanded reading, and 24 for each drive.
+The folded lime monogram has a lavender inset on a graphite tile. The widget and native window use the same PNG, and the executable embeds the matching Windows ICO. Meters light from left to right as use grows, with 15 segments in compact mode, 20 for each expanded reading, and 24 for each drive.
 
 ## Components
 
