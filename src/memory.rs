@@ -206,7 +206,12 @@ pub(crate) fn protected_foreground_pid() -> u32 {
     }
 }
 
-fn blocked_reason(pid: u32, name: &str, path: &str, foreground: u32) -> Option<&'static str> {
+pub(crate) fn blocked_reason(
+    pid: u32,
+    name: &str,
+    path: &str,
+    foreground: u32,
+) -> Option<&'static str> {
     let name = name.to_ascii_lowercase();
     if pid == unsafe { GetCurrentProcessId() } {
         return Some("이 앱");

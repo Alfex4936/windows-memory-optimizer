@@ -32,6 +32,7 @@ fn main() -> eframe::Result {
     if args.iter().any(|a| a == "--expanded") {
         preferences.compact = false;
     }
+    window::set_taskbar_identity();
     let _ = memory::protected_foreground_pid();
     let widget = ui::starts_as_widget();
     let small_window = args.iter().any(|a| a == "--small-window");

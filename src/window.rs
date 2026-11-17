@@ -1,19 +1,49 @@
 use raw_window_handle::{HasWindowHandle, RawWindowHandle};
-use std::cell::Cell;
+use std::{cell::Cell, ptr};
 use windows_sys::Win32::{
     Foundation::{HWND, LPARAM, LRESULT, POINT, RECT, WPARAM},
     Graphics::Gdi::{
         GetMonitorInfoW, MONITOR_DEFAULTTONEAREST, MONITORINFO, MonitorFromRect, ScreenToClient,
     },
+    System::LibraryLoader::GetModuleHandleW,
     UI::{
-        Shell::{DefSubclassProc, RemoveWindowSubclass, SetWindowSubclass},
+        Shell::{
+            DefSubclassProc, RemoveWindowSubclass, SetCurrentProcessExplicitAppUserModelID,
+            SetWindowSubclass,
+        },
         WindowsAndMessaging::{
-            GetWindowRect, HTCAPTION, IDC_SIZEALL, IsIconic, LoadCursorW, SWP_NOACTIVATE,
-            SWP_NOSIZE, SWP_NOZORDER, SetCursor, SetWindowPos, WM_NCHITTEST, WM_NCLBUTTONDBLCLK,
-            WM_SETCURSOR,
+            GetWindowRect, HTCAPTION, ICON_BIG, IDC_SIZEALL, IsIconic, LoadCursorW, LoadIconW,
+            SWP_NOACTIVATE, SWP_NOSIZE, SWP_NOZORDER, SendMessageW, SetCursor, SetWindowPos,
+            WM_NCHITTEST, WM_NCLBUTTONDBLCLK, WM_SETCURSOR, WM_SETICON,
         },
     },
 };
+
+pub fn set_taskbar_identity() {
+    let id = concat!("Alfex4936.Memori.Icon.", env!("MEMORI_ICON_REVISION"));
+    let id: Vec<u16> = id.encode_utf16().chain([0]).collect();
+    unsafe {
+        SetCurrentProcessExplicitAppUserModelID(id.as_ptr());
+    }
+}
+
+pub fn set_taskbar_icon(window: Option<HWND>) {
+    let Some(window) = window else {
+        return;
+    };
+    unsafe {
+        let module = GetModuleHandleW(ptr::null());
+        if module.is_null() {
+            return;
+        }
+        // winresource embeds the icon group as resource 1. LoadIconW returns a shared handle.
+        let icon = LoadIconW(module, ptr::without_provenance(1));
+        if !icon.is_null() {
+            // eframe already sets ICON_SMALL. Set ICON_BIG so Explorer uses this window's icon.
+            SendMessageW(window, WM_SETICON, ICON_BIG as WPARAM, icon as LPARAM);
+        }
+    }
+}
 
 pub struct DragRegion {
     window: HWND,

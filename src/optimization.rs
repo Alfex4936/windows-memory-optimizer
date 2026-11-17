@@ -9,9 +9,11 @@ use windows_sys::Win32::{
     Storage::FileSystem::{GetDiskFreeSpaceExW, GetDriveTypeW, GetLogicalDrives},
     System::{
         Threading::{
-            GetProcessInformation, PROCESS_POWER_THROTTLING_CURRENT_VERSION,
+            BELOW_NORMAL_PRIORITY_CLASS, GetPriorityClass, GetProcessInformation,
+            NORMAL_PRIORITY_CLASS, PROCESS_POWER_THROTTLING_CURRENT_VERSION,
             PROCESS_POWER_THROTTLING_EXECUTION_SPEED, PROCESS_POWER_THROTTLING_STATE,
-            PROCESS_SET_INFORMATION, ProcessPowerThrottling, SetProcessInformation,
+            PROCESS_SET_INFORMATION, ProcessPowerThrottling, SetPriorityClass,
+            SetProcessInformation,
         },
         WindowsProgramming::DRIVE_FIXED,
     },
@@ -23,6 +25,18 @@ pub enum PowerPolicy {
     Automatic,
     Eco,
     Performance,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum CpuPriority {
+    Normal,
+    BelowNormal,
+    Other,
+}
+
+pub struct CpuSettings {
+    pub priority: Result<CpuPriority, String>,
+    pub power: Result<PowerPolicy, String>,
 }
 
 const SPEED: u32 = PROCESS_POWER_THROTTLING_EXECUTION_SPEED;
@@ -77,9 +91,44 @@ fn policy(state: &PROCESS_POWER_THROTTLING_STATE) -> PowerPolicy {
     }
 }
 
-pub fn power_policy(process: &Process) -> Result<PowerPolicy, String> {
+fn read_priority(handle: HANDLE) -> Result<CpuPriority, String> {
+    match unsafe { GetPriorityClass(handle) } {
+        0 => Err(error("CPU 우선순위를 읽지 못했습니다")),
+        NORMAL_PRIORITY_CLASS => Ok(CpuPriority::Normal),
+        BELOW_NORMAL_PRIORITY_CLASS => Ok(CpuPriority::BelowNormal),
+        _ => Ok(CpuPriority::Other),
+    }
+}
+
+pub fn cpu_settings(process: &Process) -> Result<CpuSettings, String> {
     let handle = memory::checked_process(process, 0, false)?;
-    read_power(handle.0).map(|state| policy(&state))
+    Ok(CpuSettings {
+        priority: read_priority(handle.0),
+        power: read_power(handle.0).map(|state| policy(&state)),
+    })
+}
+
+pub fn toggle_cpu_priority(process: &Process, expected: CpuPriority) -> Result<(), String> {
+    let (class, desired) = match expected {
+        CpuPriority::Normal => (BELOW_NORMAL_PRIORITY_CLASS, CpuPriority::BelowNormal),
+        CpuPriority::BelowNormal => (NORMAL_PRIORITY_CLASS, CpuPriority::Normal),
+        CpuPriority::Other => return Err("이 CPU 우선순위는 변경할 수 없습니다".into()),
+    };
+    let handle = memory::checked_process(
+        process,
+        PROCESS_SET_INFORMATION,
+        desired == CpuPriority::BelowNormal,
+    )?;
+    if read_priority(handle.0)? != expected {
+        return Err("CPU 우선순위가 바뀌었습니다. 다시 확인한 뒤 시도하세요".into());
+    }
+    if unsafe { SetPriorityClass(handle.0, class) } == 0 {
+        return Err(error("CPU 우선순위를 변경하지 못했습니다"));
+    }
+    if read_priority(handle.0)? != desired {
+        return Err("CPU 우선순위가 변경 요청과 다릅니다. 현재 상태를 다시 확인하세요".into());
+    }
+    Ok(())
 }
 
 pub fn set_power_policy(
@@ -179,6 +228,40 @@ mod tests {
     use windows_sys::Win32::System::Threading::{
         GetPriorityClass, PROCESS_POWER_THROTTLING_IGNORE_TIMER_RESOLUTION,
     };
+
+    fn power_policy(process: &Process) -> Result<PowerPolicy, String> {
+        cpu_settings(process)?.power
+    }
+
+    #[test]
+    fn cpu_priority_roundtrip_refuses_stale_state_and_leaves_power_policy_intact() {
+        let (_child, process) = memory::tests::disposable_process();
+        let handle = memory::checked_process(&process, PROCESS_SET_INFORMATION, false).unwrap();
+        assert_ne!(
+            unsafe { SetPriorityClass(handle.0, NORMAL_PRIORITY_CLASS) },
+            0
+        );
+        let power = read_power(handle.0).unwrap();
+
+        toggle_cpu_priority(&process, CpuPriority::Normal).unwrap();
+        assert_eq!(
+            cpu_settings(&process).unwrap().priority.unwrap(),
+            CpuPriority::BelowNormal
+        );
+        assert!(toggle_cpu_priority(&process, CpuPriority::Normal).is_err());
+        assert!(toggle_cpu_priority(&process, CpuPriority::Other).is_err());
+        let mut stale = process.clone();
+        stale.created ^= 1;
+        assert!(toggle_cpu_priority(&stale, CpuPriority::BelowNormal).is_err());
+
+        toggle_cpu_priority(&process, CpuPriority::BelowNormal).unwrap();
+        assert_eq!(read_priority(handle.0).unwrap(), CpuPriority::Normal);
+        let after = read_power(handle.0).unwrap();
+        assert_eq!(
+            (after.ControlMask, after.StateMask),
+            (power.ControlMask, power.StateMask)
+        );
+    }
 
     #[test]
     fn efficiency_roundtrip_preserves_other_flags_and_refuses_stale_updates() {

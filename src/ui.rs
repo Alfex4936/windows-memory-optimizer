@@ -1,7 +1,7 @@
 use crate::{
     cleanup::{self, Catalog, Category, CleanupResult, ScanProgress, ScanReport},
     memory::{self, Process, Snapshot, TrimResult},
-    optimization::{self, Drive, PowerPolicy},
+    optimization::{self, CpuPriority, CpuSettings, Drive, PowerPolicy},
     preferences::{self, Preferences},
     sort::{Column, ProcessSort},
     startup::{self, StartupEntry, StartupState},
@@ -57,7 +57,7 @@ impl Page {
 #[derive(Clone, Copy, PartialEq)]
 enum OptimizationTab {
     Storage,
-    Power,
+    Cpu,
 }
 
 #[derive(Clone, Copy, PartialEq)]
@@ -85,7 +85,8 @@ enum Command {
     Trim(Vec<Process>),
     Startup,
     Toggle(StartupEntry),
-    ReadPower(Process),
+    ReadCpu(Process),
+    ToggleCpuPriority(Process, CpuPriority),
     SetPower(Process, PowerPolicy, PowerPolicy),
     Storage,
 }
@@ -94,7 +95,7 @@ enum Event {
     Trim(TrimResult),
     Startup(Result<Vec<StartupEntry>, String>),
     Changed(Result<String, String>),
-    Power(Result<PowerPolicy, String>),
+    Cpu(Result<CpuSettings, String>),
     Storage(Result<Vec<Drive>, String>),
     RecycleBin(Result<(u64, u64), String>),
 }
@@ -230,9 +231,10 @@ pub struct App {
     startup_filter: StartupFilter,
     busy: bool,
     startup_busy: bool,
-    power_target: Option<(u32, u64)>,
-    power: Option<Result<PowerPolicy, String>>,
-    power_busy: bool,
+    cpu_target: Option<(u32, u64)>,
+    cpu_settings: Option<Result<CpuSettings, String>>,
+    cpu_busy: bool,
+    cpu_candidates_only: bool,
     storage: Option<Result<Vec<Drive>, String>>,
     recycle_bin: Option<Result<(u64, u64), String>>,
     storage_busy: bool,
@@ -773,13 +775,20 @@ impl App {
                             send(Event::Changed(startup::toggle(&entry)));
                             send(Event::Startup(startup::scan()));
                         }
-                        Ok(Command::ReadPower(process)) => {
-                            send(Event::Power(optimization::power_policy(&process)));
+                        Ok(Command::ReadCpu(process)) => {
+                            send(Event::Cpu(optimization::cpu_settings(&process)));
+                        }
+                        Ok(Command::ToggleCpuPriority(process, expected)) => {
+                            send(Event::Cpu(
+                                optimization::toggle_cpu_priority(&process, expected)
+                                    .and_then(|()| optimization::cpu_settings(&process)),
+                            ));
                         }
                         Ok(Command::SetPower(process, expected, desired)) => {
-                            send(Event::Power(optimization::set_power_policy(
-                                &process, expected, desired,
-                            )));
+                            send(Event::Cpu(
+                                optimization::set_power_policy(&process, expected, desired)
+                                    .and_then(|_| optimization::cpu_settings(&process)),
+                            ));
                         }
                         Ok(Command::Storage) => {
                             send(Event::Storage(optimization::storage()));
@@ -810,6 +819,8 @@ impl App {
         } else {
             None
         };
+        let window = window::handle(cc);
+        window::set_taskbar_icon(window);
         Self {
             logo,
             pinned: preferences.pinned,
@@ -817,8 +828,8 @@ impl App {
             preferences,
             pending_position,
             position_changed_at: None,
-            window: window::handle(cc),
-            drag_region: window::DragRegion::install(window::handle(cc)),
+            window,
+            drag_region: window::DragRegion::install(window),
             trim_finished_at: None,
             launch_at_login: login.unwrap_or(false),
             widget: starts_as_widget(),
@@ -838,9 +849,10 @@ impl App {
             startup_filter: StartupFilter::All,
             busy: false,
             startup_busy: page == Page::Startup,
-            power_target: None,
-            power: None,
-            power_busy: false,
+            cpu_target: None,
+            cpu_settings: None,
+            cpu_busy: false,
+            cpu_candidates_only: true,
             storage: None,
             recycle_bin: None,
             storage_busy: false,
@@ -954,9 +966,9 @@ impl App {
                         Err(e) => (e, true),
                     });
                 }
-                Event::Power(result) => {
-                    self.power_busy = false;
-                    self.power = Some(result);
+                Event::Cpu(result) => {
+                    self.cpu_busy = false;
+                    self.cpu_settings = Some(result);
                 }
                 Event::Storage(result) => {
                     self.storage_busy = false;
@@ -975,7 +987,7 @@ impl App {
             ));
             self.busy = false;
             self.startup_busy = false;
-            self.power_busy = false;
+            self.cpu_busy = false;
             self.storage_busy = false;
         }
     }
@@ -1651,7 +1663,7 @@ impl App {
         ui.horizontal(|ui| {
             for (tab, label) in [
                 (OptimizationTab::Storage, "저장소 정리"),
-                (OptimizationTab::Power, "전력 관리"),
+                (OptimizationTab::Cpu, "CPU 최적화"),
             ] {
                 if tab_button(ui, label, self.optimization_tab == tab).clicked() {
                     self.optimization_tab = tab;
@@ -1662,7 +1674,7 @@ impl App {
         egui::ScrollArea::vertical()
             .id_salt(match self.optimization_tab {
                 OptimizationTab::Storage => "storage",
-                OptimizationTab::Power => "power",
+                OptimizationTab::Cpu => "cpu",
             })
             .show(ui, |ui| {
                 let width = ui.available_width();
@@ -1678,10 +1690,10 @@ impl App {
                             self.storage_controls(ui);
                         });
                     }
-                    OptimizationTab::Power => {
+                    OptimizationTab::Cpu => {
                         surface().show(ui, |ui| {
                             ui.set_min_width(width - 34.0);
-                            self.power_controls(ui);
+                            self.cpu_controls(ui);
                         });
                     }
                 }
@@ -2070,27 +2082,33 @@ impl App {
         }
     }
 
-    fn power_controls(&mut self, ui: &mut egui::Ui) {
-        ui.horizontal_wrapped(|ui| {
-            ui.label(RichText::new("앱별 전력 관리").size(19.0).strong());
-            ui.label(
-                RichText::new("절전 우선으로 백그라운드 작업의 전력 사용을 줄일 수 있습니다.")
-                    .small()
-                    .color(MUTED),
-            );
+    fn cpu_controls(&mut self, ui: &mut egui::Ui) {
+        ui.horizontal(|ui| {
+            ui.label(RichText::new("앱별 CPU 사용량").size(19.0).strong());
+            ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
+                let usage = self.snapshot.as_ref().and_then(|s| s.cpu_percent);
+                ui.label(RichText::new(format!("전체 CPU {}", cpu_usage(usage))).color(CPU))
+                    .on_hover_text(CPU_HELP);
+            });
         });
-        ui.add_space(6.0);
-        ui.add(
-            egui::TextEdit::singleline(&mut self.search)
-                .hint_text("앱 이름 또는 PID 검색")
-                .desired_width(235.0)
-                .margin(Vec2::splat(7.0)),
-        );
+        ui.horizontal_wrapped(|ui| {
+            ui.add(
+                egui::TextEdit::singleline(&mut self.search)
+                    .hint_text("앱 이름 또는 PID 검색")
+                    .desired_width(235.0)
+                    .margin(Vec2::splat(7.0)),
+            );
+            ui.checkbox(&mut self.cpu_candidates_only, "백그라운드 후보만")
+                .on_hover_text("시스템 구성 요소, Memori, 현재 사용 중인 앱을 제외합니다.");
+        });
         let query = self.search.to_lowercase();
+        let foreground = memory::protected_foreground_pid();
+        let protected = |p: &Process| memory::blocked_reason(p.pid, &p.name, &p.path, foreground);
         let mut rows: Vec<_> = self
             .snapshot
             .iter()
             .flat_map(|s| &s.processes)
+            .filter(|p| !self.cpu_candidates_only || protected(p).is_none())
             .filter(|p| {
                 p.name.to_lowercase().contains(&query) || p.pid.to_string().contains(&query)
             })
@@ -2104,8 +2122,18 @@ impl App {
         let row_height = (ui.text_style_height(&egui::TextStyle::Button)
             + 2.0 * ui.spacing().button_padding.y)
             .max(29.0);
+        if rows.is_empty() {
+            ui.label(
+                RichText::new(if self.snapshot.is_some() {
+                    "일치하는 앱이 없습니다. 검색어나 후보 필터를 바꿔 보세요."
+                } else {
+                    "프로세스 목록을 읽고 있습니다…"
+                })
+                .color(MUTED),
+            );
+        }
         egui::ScrollArea::vertical()
-            .id_salt("power-apps")
+            .id_salt("cpu-apps")
             .max_height(174.0)
             .auto_shrink([false, true])
             .show_rows(ui, row_height, rows.len(), |ui, range| {
@@ -2120,8 +2148,8 @@ impl App {
                     ui.push_id(id, |ui| {
                         if ui
                             .add_enabled(
-                                !self.power_busy && !self.busy,
-                                egui::Button::selectable(self.power_target == Some(id), label)
+                                !self.cpu_busy && !self.busy,
+                                egui::Button::selectable(self.cpu_target == Some(id), label)
                                     .min_size(Vec2::new(ui.available_width(), row_height))
                                     .truncate(),
                             )
@@ -2132,80 +2160,108 @@ impl App {
                         }
                     });
                 }
-                if rows.is_empty() {
-                    ui.label(
-                        RichText::new(if self.snapshot.is_some() {
-                            "일치하는 앱이 없습니다."
-                        } else {
-                            "프로세스 목록을 읽고 있습니다…"
-                        })
-                        .color(MUTED),
-                    );
-                }
             });
         if let Some(process) = picked {
-            self.power_target = Some((process.pid, process.created));
-            self.power = None;
-            self.power_busy = true;
-            self.send(Command::ReadPower(process));
+            self.cpu_target = Some((process.pid, process.created));
+            self.cpu_settings = None;
+            self.cpu_busy = true;
+            self.send(Command::ReadCpu(process));
         }
         let target = self.snapshot.as_ref().and_then(|s| {
             s.processes
                 .iter()
-                .find(|p| Some((p.pid, p.created)) == self.power_target)
+                .find(|p| Some((p.pid, p.created)) == self.cpu_target)
         });
-        let mut power_command = None;
+        let mut cpu_command = None;
         if let Some(process) = target {
-            ui.horizontal_wrapped(|ui| {
+            ui.separator();
+            ui.horizontal(|ui| {
                 ui.label(RichText::new(format!("{} · {}", process.name, process.pid)).strong());
-                if self.power_busy {
-                    ui.label(RichText::new("전력 정책을 확인하고 있습니다…").color(MUTED));
-                } else if let Some(Ok(policy)) = self.power.as_ref() {
-                    let state = match policy {
-                        PowerPolicy::Automatic => "Windows 자동 관리",
-                        PowerPolicy::Eco => "절전 우선 적용 중",
-                        PowerPolicy::Performance => "절전 제한 해제 상태",
-                    };
-                    ui.label(RichText::new(state).color(if *policy == PowerPolicy::Eco {
-                        ACCENT
-                    } else {
-                        MUTED
-                    }));
-                    for (desired, label) in [
-                        (PowerPolicy::Eco, "절전 우선 적용"),
-                        (PowerPolicy::Automatic, "Windows 자동 관리로 전환"),
-                    ] {
-                        if ui
-                            .add_enabled(!self.busy && *policy != desired, egui::Button::new(label))
-                            .clicked()
-                        {
-                            power_command =
-                                Some(Command::SetPower(process.clone(), *policy, desired));
-                        }
-                    }
-                } else if let Some(Err(error)) = self.power.as_ref() {
-                    ui.label(RichText::new(error).color(WARN));
-                } else {
-                    ui.label(RichText::new("상태를 읽으려면 앱을 다시 선택하세요.").color(MUTED));
+                if let Some(reason) = protected(process) {
+                    ui.label(RichText::new(reason).size(12.0).color(WARN));
                 }
             });
+            let can_lower = protected(process).is_none() && !self.busy;
+            if self.cpu_busy {
+                ui.label(RichText::new("CPU 설정을 확인하고 있습니다…").color(MUTED));
+            } else if let Some(Ok(settings)) = self.cpu_settings.as_ref() {
+                ui.horizontal_wrapped(|ui| match &settings.priority {
+                    Ok(priority) => {
+                        let (state, action) = match priority {
+                            CpuPriority::Normal => {
+                                ("CPU 우선순위 · 보통", Some(("우선순위 낮추기", can_lower)))
+                            }
+                            CpuPriority::BelowNormal => {
+                                ("CPU 우선순위 · 낮음", Some(("보통으로 전환", !self.busy)))
+                            }
+                            CpuPriority::Other => ("CPU 우선순위 · 다른 정책", None),
+                        };
+                        ui.label(RichText::new(state).color(MUTED));
+                        if let Some((label, enabled)) = action
+                            && ui.add_enabled(enabled, egui::Button::new(label)).clicked()
+                        {
+                            cpu_command =
+                                Some(Command::ToggleCpuPriority(process.clone(), *priority));
+                        }
+                    }
+                    Err(error) => {
+                        ui.label(RichText::new(error).color(WARN));
+                    }
+                });
+                ui.horizontal_wrapped(|ui| match &settings.power {
+                    Ok(policy) => {
+                        let state = match policy {
+                            PowerPolicy::Automatic => "Windows 자동 관리",
+                            PowerPolicy::Eco => "절전 우선 적용 중",
+                            PowerPolicy::Performance => "절전 제한 해제 상태",
+                        };
+                        ui.label(RichText::new(state).color(if *policy == PowerPolicy::Eco {
+                            ACCENT
+                        } else {
+                            MUTED
+                        }));
+                        for (desired, label) in [
+                            (PowerPolicy::Eco, "절전 우선 적용"),
+                            (PowerPolicy::Automatic, "Windows 자동 관리로 전환"),
+                        ] {
+                            if ui
+                                .add_enabled(
+                                    !self.busy
+                                        && *policy != desired
+                                        && (desired != PowerPolicy::Eco || can_lower),
+                                    egui::Button::new(label),
+                                )
+                                .clicked()
+                            {
+                                cpu_command =
+                                    Some(Command::SetPower(process.clone(), *policy, desired));
+                            }
+                        }
+                    }
+                    Err(error) => {
+                        ui.label(RichText::new(error).color(WARN));
+                    }
+                });
+            } else if let Some(Err(error)) = self.cpu_settings.as_ref() {
+                ui.label(RichText::new(error).color(WARN));
+            }
         } else {
             ui.label(
-                RichText::new(if self.power_target.is_some() {
+                RichText::new(if self.cpu_target.is_some() {
                     "선택한 앱이 종료되었습니다. 다른 앱을 선택하세요."
                 } else {
-                    "전력 정책을 확인할 앱을 선택하세요."
+                    "CPU 사용량이 높은 순서입니다. 조절할 앱을 선택하세요."
                 })
                 .color(MUTED),
             );
         }
-        if let Some(command) = power_command {
-            self.power_busy = true;
+        if let Some(command) = cpu_command {
+            self.cpu_busy = true;
             self.send(command);
         }
         ui.label(
             RichText::new(
-                "앱 실행 중에 적용됩니다. 속도가 중요한 작업은 Windows 자동 관리를 사용하세요.",
+                "우선순위를 낮추면 CPU가 바쁠 때 다른 앱에 실행 기회를 먼저 줍니다. 설정은 프로세스 종료 시 끝납니다.",
             )
             .small()
             .color(MUTED),
@@ -3117,7 +3173,7 @@ impl eframe::App for App {
                             .add_enabled(
                                 !self.busy
                                     && !self.startup_busy
-                                    && !self.power_busy
+                                    && !self.cpu_busy
                                     && !self.storage_busy,
                                 egui::Button::new("새로 고침").min_size(Vec2::new(85.0, 32.0)),
                             )
@@ -3137,13 +3193,13 @@ impl eframe::App for App {
                                         .as_ref()
                                         .and_then(|s| {
                                             s.processes.iter().find(|p| {
-                                                Some((p.pid, p.created)) == self.power_target
+                                                Some((p.pid, p.created)) == self.cpu_target
                                             })
                                         })
                                         .cloned()
                                     {
-                                        self.power_busy = true;
-                                        self.send(Command::ReadPower(process));
+                                        self.cpu_busy = true;
+                                        self.send(Command::ReadCpu(process));
                                     }
                                 }
                             }
