@@ -72,6 +72,7 @@ mod tests {
             path: format!(r"D:\Apps\{name}"),
             bytes,
             cpu_percent: None,
+            below_normal: false,
             created: u64::from(pid),
             eligible,
             reason: reason.into(),

@@ -248,6 +248,17 @@ mod tests {
             cpu_settings(&process).unwrap().priority.unwrap(),
             CpuPriority::BelowNormal
         );
+        let sampled_below_normal = || {
+            memory::Sampler::default()
+                .sample()
+                .unwrap()
+                .processes
+                .into_iter()
+                .find(|p| (p.pid, p.created) == (process.pid, process.created))
+                .unwrap()
+                .below_normal
+        };
+        assert!(sampled_below_normal());
         assert!(toggle_cpu_priority(&process, CpuPriority::Normal).is_err());
         assert!(toggle_cpu_priority(&process, CpuPriority::Other).is_err());
         let mut stale = process.clone();
@@ -256,6 +267,7 @@ mod tests {
 
         toggle_cpu_priority(&process, CpuPriority::BelowNormal).unwrap();
         assert_eq!(read_priority(handle.0).unwrap(), CpuPriority::Normal);
+        assert!(!sampled_below_normal());
         let after = read_power(handle.0).unwrap();
         assert_eq!(
             (after.ControlMask, after.StateMask),

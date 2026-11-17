@@ -17,7 +17,7 @@ The interface is in Korean. The compact widget shows RAM usage, cleanup, and exp
 ## Features
 
 - Live physical/commit memory and CPU readings, with the top five processes' CPU/RAM in the expanded widget.
-- Lower or restore an app's CPU scheduling priority from the expanded widget.
+- Lower an app's CPU scheduling priority from the expanded widget. Filter for below-normal apps and restore each one directly.
 - Sortable name, PID, CPU, working-set, and status columns with process selection.
 - Reversible current-user Run and Startup-folder management, status filters, and command details.
 - Find background processes by CPU use, lower their scheduling priority, or apply EcoQoS on Windows 11. Check fixed-drive capacity and open Windows Storage settings.
