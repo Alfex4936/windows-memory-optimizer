@@ -131,6 +131,16 @@ pub fn toggle_cpu_priority(process: &Process, expected: CpuPriority) -> Result<(
     Ok(())
 }
 
+pub fn restore_cpu_priorities(processes: Vec<Process>) -> Vec<(Process, Result<(), String>)> {
+    processes
+        .into_iter()
+        .map(|process| {
+            let result = toggle_cpu_priority(&process, CpuPriority::BelowNormal);
+            (process, result)
+        })
+        .collect()
+}
+
 pub fn set_power_policy(
     process: &Process,
     expected: PowerPolicy,
@@ -273,6 +283,39 @@ mod tests {
             (after.ControlMask, after.StateMask),
             (power.ControlMask, power.StateMask)
         );
+    }
+
+    #[test]
+    fn restore_batch_continues_after_a_stale_process() {
+        let (_first_child, first) = memory::tests::disposable_process();
+        let (_skipped_child, skipped) = memory::tests::disposable_process();
+        let (_last_child, last) = memory::tests::disposable_process();
+        for process in [&first, &skipped, &last] {
+            let handle = memory::checked_process(process, PROCESS_SET_INFORMATION, false).unwrap();
+            assert_ne!(
+                unsafe { SetPriorityClass(handle.0, BELOW_NORMAL_PRIORITY_CLASS) },
+                0
+            );
+        }
+        let mut stale = skipped.clone();
+        stale.created ^= 1;
+        let results = restore_cpu_priorities(vec![first.clone(), stale, last.clone()]);
+        assert!(results[0].1.is_ok());
+        assert!(
+            results[1]
+                .1
+                .as_ref()
+                .unwrap_err()
+                .contains("프로세스가 바뀌었습니다")
+        );
+        assert!(results[2].1.is_ok());
+        for (process, expected) in [
+            (first, CpuPriority::Normal),
+            (skipped, CpuPriority::BelowNormal),
+            (last, CpuPriority::Normal),
+        ] {
+            assert_eq!(cpu_settings(&process).unwrap().priority.unwrap(), expected);
+        }
     }
 
     #[test]

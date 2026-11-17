@@ -87,6 +87,7 @@ enum Command {
     Toggle(StartupEntry),
     ReadCpu(Process),
     ToggleCpuPriority(Process, CpuPriority),
+    RestoreCpuPriorities(Vec<Process>),
     SetPower(Process, PowerPolicy, PowerPolicy),
     Storage,
 }
@@ -96,6 +97,7 @@ enum Event {
     Startup(Result<Vec<StartupEntry>, String>),
     Changed(Result<String, String>),
     Cpu(Result<CpuSettings, String>),
+    CpuRestored(Vec<(Process, Result<(), String>)>),
     Storage(Result<Vec<Drive>, String>),
     RecycleBin(Result<(u64, u64), String>),
 }
@@ -231,7 +233,8 @@ pub struct App {
     widget_cpu: bool,
     widget_cpu_search: String,
     widget_low_only: bool,
-    widget_restore_target: Option<(u32, u64)>,
+    widget_restore_selected: HashSet<(u32, u64)>,
+    widget_restore_feedback: Option<(String, Vec<String>)>,
     startup_filter: StartupFilter,
     busy: bool,
     startup_busy: bool,
@@ -788,6 +791,11 @@ impl App {
                                     .and_then(|()| optimization::cpu_settings(&process)),
                             ));
                         }
+                        Ok(Command::RestoreCpuPriorities(processes)) => {
+                            send(Event::CpuRestored(optimization::restore_cpu_priorities(
+                                processes,
+                            )));
+                        }
                         Ok(Command::SetPower(process, expected, desired)) => {
                             send(Event::Cpu(
                                 optimization::set_power_policy(&process, expected, desired)
@@ -853,7 +861,8 @@ impl App {
             widget_cpu: false,
             widget_cpu_search: String::new(),
             widget_low_only: false,
-            widget_restore_target: None,
+            widget_restore_selected: HashSet::new(),
+            widget_restore_feedback: None,
             startup_filter: StartupFilter::All,
             busy: false,
             startup_busy: page == Page::Startup,
@@ -987,6 +996,45 @@ impl App {
                         process.below_normal = priority == CpuPriority::BelowNormal;
                     }
                     self.cpu_settings = Some(result);
+                }
+                Event::CpuRestored(results) => {
+                    self.cpu_busy = false;
+                    let single = (results.len() == 1).then(|| results[0].0.name.clone());
+                    let mut restored = 0;
+                    let mut failures = Vec::new();
+                    for (process, result) in results {
+                        let id = (process.pid, process.created);
+                        if let Err(error) = result {
+                            failures
+                                .push(format!("{} · PID {} · {error}", process.name, process.pid));
+                            continue;
+                        }
+                        restored += 1;
+                        self.widget_restore_selected.remove(&id);
+                        if let Some(snapshot) = &mut self.snapshot
+                            && let Some(row) = snapshot
+                                .processes
+                                .iter_mut()
+                                .find(|p| (p.pid, p.created) == id)
+                        {
+                            row.below_normal = false;
+                        }
+                        if self.cpu_target == Some(id)
+                            && let Some(Ok(settings)) = &mut self.cpu_settings
+                        {
+                            settings.priority = Ok(CpuPriority::Normal);
+                        }
+                    }
+                    let summary = if failures.len() == 1 && single.is_some() {
+                        failures[0].clone()
+                    } else if !failures.is_empty() {
+                        format!("{restored}개 전환됨 · {}개 실패", failures.len())
+                    } else if let Some(name) = single {
+                        format!("{name} · 보통으로 전환됨")
+                    } else {
+                        format!("{restored}개 앱 · 보통으로 전환됨")
+                    };
+                    self.widget_restore_feedback = Some((summary, failures));
                 }
                 Event::Storage(result) => {
                     self.storage_busy = false;
@@ -2144,95 +2192,119 @@ impl App {
             descending: false,
         }
         .sort(&mut rows);
+        self.widget_restore_selected
+            .retain(|id| rows.iter().any(|p| (p.pid, p.created) == *id));
 
+        let enabled = !self.cpu_busy && !self.busy;
+        let mut restore = Vec::new();
         if rows.is_empty() {
             ui.label(RichText::new("우선순위가 낮은 앱이 없습니다.").color(MUTED));
         } else {
-            ui.label(
-                RichText::new(format!("낮음 · {}개 프로세스", rows.len()))
-                    .size(12.0)
-                    .color(MUTED),
-            );
-        }
-        let mut restore = None;
-        egui::ScrollArea::vertical()
-            .id_salt("widget-low-priority")
-            .max_height(138.0)
-            .auto_shrink([false, true])
-            .show_rows(ui, 28.0, rows.len(), |ui, range| {
-                for process in &rows[range] {
-                    let name = format!("{} · PID {}", process.name, process.pid);
-                    ui.push_id((process.pid, process.created), |ui| {
-                        ui.horizontal(|ui| {
-                            let action_width = 112.0;
-                            cell(
-                                ui,
-                                ui.available_width() - action_width - ui.spacing().item_spacing.x,
-                                28.0,
-                                RichText::new(&name).size(12.0),
-                                Align::LEFT,
-                            )
-                            .on_hover_text(&name);
-                            let button = ui.add_enabled(
-                                !self.cpu_busy && !self.busy,
-                                egui::Button::new(RichText::new("보통으로 전환").size(12.0))
-                                    .small()
-                                    .min_size(Vec2::new(action_width, 28.0)),
-                            );
-                            button.widget_info(|| {
-                                egui::WidgetInfo::labeled(
-                                    egui::WidgetType::Button,
-                                    button.enabled(),
-                                    format!("{name} 보통으로 전환"),
-                                )
-                            });
-                            if button.clicked() {
-                                restore = Some((*process).clone());
-                            }
-                        });
-                    });
-                }
+            ui.horizontal(|ui| {
+                ui.label(
+                    RichText::new(format!("낮음 · {}개 프로세스", rows.len()))
+                        .size(12.0)
+                        .color(MUTED),
+                );
+                ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
+                    ui.label(
+                        RichText::new(format!("{}개 선택", self.widget_restore_selected.len()))
+                            .size(12.0)
+                            .color(MUTED),
+                    );
+                });
             });
-        if let Some(process) = restore {
-            let id = (process.pid, process.created);
-            self.widget_restore_target = Some(id);
-            self.cpu_target = Some(id);
-            self.cpu_settings = None;
-            self.cpu_busy = true;
-            self.send(Command::ToggleCpuPriority(
-                process,
-                CpuPriority::BelowNormal,
-            ));
-        }
-        if let Some(id) = self.widget_restore_target
-            && self.cpu_target == Some(id)
-        {
-            let text = if self.cpu_busy {
-                RichText::new("우선순위를 변경하고 있습니다…").color(MUTED)
-            } else {
-                match self.cpu_settings.as_ref() {
-                    Some(Ok(CpuSettings {
-                        priority: Ok(CpuPriority::Normal),
-                        ..
-                    })) => {
-                        let name = snapshot
-                            .processes
-                            .iter()
-                            .find(|p| (p.pid, p.created) == id)
-                            .map_or("선택한 앱", |p| p.name.as_str());
-                        RichText::new(format!("{name} · 보통으로 전환됨")).color(ACCENT)
+            egui::ScrollArea::vertical()
+                .id_salt("widget-low-priority")
+                .max_height(104.0)
+                .auto_shrink([false, true])
+                .show_rows(ui, 28.0, rows.len(), |ui, range| {
+                    for process in &rows[range] {
+                        let id = (process.pid, process.created);
+                        let name = format!("{} · PID {}", process.name, process.pid);
+                        ui.push_id(id, |ui| {
+                            ui.horizontal(|ui| {
+                                let mut selected = self.widget_restore_selected.contains(&id);
+                                let checkbox = ui.add_enabled(
+                                    enabled,
+                                    egui::Checkbox::without_text(&mut selected),
+                                );
+                                checkbox.widget_info(|| {
+                                    egui::WidgetInfo::selected(
+                                        egui::WidgetType::Checkbox,
+                                        checkbox.enabled(),
+                                        selected,
+                                        format!("{name} 일괄 전환 선택"),
+                                    )
+                                });
+                                if checkbox.changed() {
+                                    if selected {
+                                        self.widget_restore_selected.insert(id);
+                                    } else {
+                                        self.widget_restore_selected.remove(&id);
+                                    }
+                                }
+                                let action_width = 112.0;
+                                cell(
+                                    ui,
+                                    ui.available_width()
+                                        - action_width
+                                        - ui.spacing().item_spacing.x,
+                                    28.0,
+                                    RichText::new(&name).size(12.0),
+                                    Align::LEFT,
+                                )
+                                .on_hover_text(&name);
+                                let button = ui.add_enabled(
+                                    enabled,
+                                    egui::Button::new(RichText::new("보통으로 전환").size(12.0))
+                                        .small()
+                                        .min_size(Vec2::new(action_width, 28.0)),
+                                );
+                                button.widget_info(|| {
+                                    egui::WidgetInfo::labeled(
+                                        egui::WidgetType::Button,
+                                        button.enabled(),
+                                        format!("{name} 보통으로 전환"),
+                                    )
+                                });
+                                if button.clicked() {
+                                    restore.push((*process).clone());
+                                }
+                            });
+                        });
                     }
-                    Some(
-                        Err(error)
-                        | Ok(CpuSettings {
-                            priority: Err(error),
-                            ..
-                        }),
-                    ) => RichText::new(error).color(WARN),
-                    _ => return,
-                }
-            };
-            ui.add(egui::Label::new(text.size(12.0)).truncate());
+                });
+            if ui
+                .add_enabled(
+                    enabled && !self.widget_restore_selected.is_empty() && restore.is_empty(),
+                    primary("선택한 앱 보통으로 전환")
+                        .min_size(Vec2::new(ui.available_width(), 31.0)),
+                )
+                .clicked()
+            {
+                restore = rows
+                    .into_iter()
+                    .filter(|p| self.widget_restore_selected.contains(&(p.pid, p.created)))
+                    .cloned()
+                    .collect();
+            }
+        }
+        if !restore.is_empty() {
+            self.widget_restore_feedback = None;
+            self.cpu_busy = true;
+            self.send(Command::RestoreCpuPriorities(restore));
+        }
+        if self.cpu_busy {
+            ui.label(RichText::new("CPU 설정 처리 중…").size(12.0).color(MUTED));
+        } else if let Some((summary, failures)) = &self.widget_restore_feedback {
+            let color = if failures.is_empty() { ACCENT } else { WARN };
+            ui.add(egui::Label::new(RichText::new(summary).size(12.0).color(color)).truncate())
+                .on_hover_text(if failures.is_empty() {
+                    summary.clone()
+                } else {
+                    failures.join("\n")
+                });
         }
     }
 
